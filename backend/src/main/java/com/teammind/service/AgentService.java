@@ -1,6 +1,7 @@
 package com.teammind.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.teammind.config.SQLiteWriteLockService;
 import com.teammind.dto.*;
 import com.teammind.entity.Agent;
 import com.teammind.entity.Agent.AgentStatus;
@@ -39,8 +40,9 @@ public class AgentService {
     private final EvolutionEngine evolutionEngine;
     private final WSEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final SQLiteWriteLockService writeLockService;
 
-    @Value("${teammind.agents-path:~/.teammind/agents}")
+    @Value("${teammind.agents-path:${user.home}/.teammind/agents}")
     private String agentsPath;
 
     /**
@@ -85,7 +87,8 @@ public class AgentService {
         agent.setInstalledAt(LocalDateTime.now());
         agent.setDownloadCount(agent.getDownloadCount() + 1);
 
-        agent = agentRepository.save(agent);
+        Agent finalAgent = agent;
+        agent = writeLockService.executeWithLock(() -> agentRepository.save(finalAgent));
 
         // 加载 Agent 配置
         loadAgentConfig(agent);
@@ -103,7 +106,8 @@ public class AgentService {
 
         agent.setInstalled(false);
         agent.setEnabled(false);
-        agentRepository.save(agent);
+        Agent finalAgent = agent;
+        writeLockService.executeWithLock(() -> agentRepository.save(finalAgent));
     }
 
     /**
@@ -115,7 +119,8 @@ public class AgentService {
                 .orElseThrow(() -> new RuntimeException("Agent not found: " + id));
 
         agent.setEnabled(enabled);
-        agent = agentRepository.save(agent);
+        Agent finalAgent = agent;
+        agent = writeLockService.executeWithLock(() -> agentRepository.save(finalAgent));
         return toDTO(agent);
     }
 
@@ -146,7 +151,8 @@ public class AgentService {
                 .evolutionScore(0.0)
                 .build();
 
-        agent = agentRepository.save(agent);
+        Agent finalAgent = agent;
+        agent = writeLockService.executeWithLock(() -> agentRepository.save(finalAgent));
 
         // 保存 Agent 配置到 Markdown 文件
         saveAgentConfig(agent);
@@ -184,7 +190,8 @@ public class AgentService {
                 agent.setEvolutionScore(newScore);
             }
 
-            agentRepository.save(agent);
+            Agent finalAgent = agent;
+            writeLockService.executeWithLock(() -> agentRepository.save(finalAgent));
 
             // 保存更新后的配置
             saveAgentConfig(agent);

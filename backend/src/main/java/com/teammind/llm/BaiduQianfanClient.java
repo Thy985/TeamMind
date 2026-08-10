@@ -46,7 +46,7 @@ public class BaiduQianfanClient implements StreamingLLMClient {
     @Value("${teammind.llm.qianfan.base-url:https://qianfan.baidubce.com/v2/coding}")
     private String baseUrl;
 
-    @Value("${teammind.llm.qianfan.default-model:ERNIE-4.0-8K}")
+    @Value("${teammind.llm.qianfan.default-model:deepseek-v3.2}")
     private String defaultModel;
 
     @Value("${teammind.llm.timeout:120000}")

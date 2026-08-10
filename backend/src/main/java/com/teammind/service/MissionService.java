@@ -2,6 +2,7 @@ package com.teammind.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.teammind.config.SQLiteWriteLockService;
 import com.teammind.dto.*;
 import com.teammind.entity.Mission;
 import com.teammind.entity.Mission.MissionStatus;
@@ -34,6 +35,7 @@ public class MissionService {
     private final ObjectMapper objectMapper;
     private final WSEventPublisher eventPublisher;
     private final MissionRuntimeManager runtimeManager;
+    private final SQLiteWriteLockService writeLockService;
 
     /**
      * 创建新任务
@@ -158,7 +160,8 @@ public class MissionService {
 
         mission.setStatus(MissionStatus.RUNNING);
         mission.setUpdatedAt(LocalDateTime.now());
-        mission = missionRepository.save(mission);
+        Mission finalMission = mission;
+        mission = writeLockService.executeWithLock(() -> missionRepository.save(finalMission));
 
         // 启动任务执行（异步）
         runtimeManager.startMission(id);
@@ -180,7 +183,8 @@ public class MissionService {
 
         mission.setStatus(MissionStatus.PAUSED);
         mission.setUpdatedAt(LocalDateTime.now());
-        mission = missionRepository.save(mission);
+        Mission finalMission = mission;
+        mission = writeLockService.executeWithLock(() -> missionRepository.save(finalMission));
 
         // ✅ 同步暂停运行时：让执行循环感知暂停状态
         runtimeManager.pauseMission(id);
@@ -202,7 +206,8 @@ public class MissionService {
 
         mission.setStatus(MissionStatus.RUNNING);
         mission.setUpdatedAt(LocalDateTime.now());
-        mission = missionRepository.save(mission);
+        Mission finalMission = mission;
+        mission = writeLockService.executeWithLock(() -> missionRepository.save(finalMission));
 
         // ✅ 同步恢复运行时
         runtimeManager.resumeMission(id);
@@ -224,7 +229,8 @@ public class MissionService {
 
         mission.setStatus(MissionStatus.FAILED);
         mission.setUpdatedAt(LocalDateTime.now());
-        mission = missionRepository.save(mission);
+        Mission finalMission = mission;
+        mission = writeLockService.executeWithLock(() -> missionRepository.save(finalMission));
 
         // ✅ 同步取消运行时：让执行循环感知取消状态并传播取消
         runtimeManager.cancelMission(id);

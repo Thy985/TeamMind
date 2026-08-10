@@ -2,12 +2,13 @@ package com.teammind.executor;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.teammind.config.SQLiteWriteLockService;
 import com.teammind.entity.Agent;
 import com.teammind.llm.*;
 import com.teammind.repository.AgentRepository;
 import com.teammind.websocket.WSEventPublisher;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -21,7 +22,6 @@ import java.util.concurrent.*;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AgentExecutionEngine {
 
     private final LLMService llmService;
@@ -29,10 +29,31 @@ public class AgentExecutionEngine {
     private final AgentRepository agentRepository;
     private final WSEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final ExecutorService executorService;
+    private final SQLiteWriteLockService writeLockService;
 
     // 执行缓存
     private final Map<String, AgentExecutionContext> activeContexts = new ConcurrentHashMap<>();
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
+
+    /**
+     * 构造函数 - 注入统一的有界线程池
+     */
+    public AgentExecutionEngine(
+            LLMService llmService,
+            LLMTrackingService trackingService,
+            AgentRepository agentRepository,
+            WSEventPublisher eventPublisher,
+            ObjectMapper objectMapper,
+            @Qualifier("agentExecutorService") ExecutorService executorService,
+            SQLiteWriteLockService writeLockService) {
+        this.llmService = llmService;
+        this.trackingService = trackingService;
+        this.agentRepository = agentRepository;
+        this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
+        this.executorService = executorService;
+        this.writeLockService = writeLockService;
+    }
 
     // 工具注册表
     private final Map<String, ToolExecutor> toolRegistry = new ConcurrentHashMap<>();
@@ -473,20 +494,22 @@ public class AgentExecutionEngine {
     }
 
     /**
-     * 更新 Agent 状态
+     * 更新 Agent 状态（SQLite 写串行化）
      */
     private void updateAgentStatus(Agent agent, Agent.AgentStatus status) {
         try {
-            // 重新从数据库获取Agent以避免合并冲突
-            Agent freshAgent = agentRepository.findById(agent.getId()).orElse(null);
-            if (freshAgent != null) {
-                freshAgent.setStatus(status);
-                freshAgent.setUpdatedAt(LocalDateTime.now());
-                agentRepository.save(freshAgent);
-                // 同步更新当前agent对象
-                agent.setStatus(status);
-                agent.setUpdatedAt(LocalDateTime.now());
-            }
+            // 重新从数据库获取Agent以避免合并冲突（写操作在锁内）
+            writeLockService.executeWithLock(() -> {
+                Agent freshAgent = agentRepository.findById(agent.getId()).orElse(null);
+                if (freshAgent != null) {
+                    freshAgent.setStatus(status);
+                    freshAgent.setUpdatedAt(LocalDateTime.now());
+                    agentRepository.save(freshAgent);
+                    // 同步更新当前agent对象
+                    agent.setStatus(status);
+                    agent.setUpdatedAt(LocalDateTime.now());
+                }
+            });
         } catch (Exception e) {
             log.warn("Failed to update agent status: agent={}, status={}, error={}", 
                     agent.getId(), status, e.getMessage());

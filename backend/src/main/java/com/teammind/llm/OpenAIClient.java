@@ -38,16 +38,16 @@ public class OpenAIClient implements LLMClient {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     
-    @Value("${teammind.llm.api-key:}")
+    @Value("${teammind.llm.openai.api-key:}")
     private String apiKey;
     
-    @Value("${teammind.llm.base-url:https://api.openai.com/v1}")
+    @Value("${teammind.llm.openai.base-url:https://api.openai.com/v1}")
     private String baseUrl;
     
-    @Value("${teammind.llm.default-model:gpt-4-turbo-preview}")
+    @Value("${teammind.llm.openai.default-model:gpt-4-turbo-preview}")
     private String defaultModel;
     
-    @Value("${teammind.llm.timeout:60000}")
+    @Value("${teammind.llm.timeout:120000}")
     private int timeoutMs;
 
     public OpenAIClient(ObjectMapper objectMapper) {
