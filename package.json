@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
+    "lint:ci": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --ignore-path .gitignore"
   },
   "dependencies": {
     "@stomp/stompjs": "^7.3.0",
@@ -31,7 +32,10 @@
     "@testing-library/vue": "^8.0.0",
     "@types/node": "^24.12.0",
     "@types/sockjs-client": "^1.5.4",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
     "@vitejs/plugin-vue": "^6.0.5",
+    "@vitest/coverage-v8": "^1.6.1",
     "@vitest/ui": "^1.0.0",
     "@vue/test-utils": "^2.4.0",
     "@vue/tsconfig": "^0.9.0",
