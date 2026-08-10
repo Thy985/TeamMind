@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teammind.entity.Agent;
 import com.teammind.entity.Agent.AgentStatus;
 import com.teammind.entity.TeamTemplate;
+import com.teammind.entity.User;
 import com.teammind.repository.AgentRepository;
 import com.teammind.repository.TeamTemplateRepository;
+import com.teammind.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
     private final TeamTemplateRepository templateRepository;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
 
     @Value("${teammind.evolution.enabled:true}")
     private boolean evolutionEnabled;
@@ -51,6 +54,9 @@ public class DataInitializer implements CommandLineRunner {
 
         // 初始化默认模板
         initDefaultTemplates();
+
+        // 初始化默认用户（登录/JWT）
+        initDefaultUser();
 
         log.info("TeamMind data initialization completed.");
     }
@@ -162,5 +168,31 @@ public class DataInitializer implements CommandLineRunner {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * 初始化默认用户（登录/JWT 认证）
+     *
+     * 演示账号：admin / admin123
+     */
+    private void initDefaultUser() {
+        if (userRepository.count() > 0) {
+            log.info("Users already exist, skipping user initialization.");
+            return;
+        }
+
+        User admin = User.builder()
+                .id("user-admin")
+                .username("admin")
+                .password("admin123")
+                .email("admin@teammind.local")
+                .roles(List.of("ADMIN"))
+                .permissions(List.of("agent:evolve", "agent:create", "mission:manage", "read:code", "read:files", "read:web", "write:text"))
+                .enabled(true)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        userRepository.save(admin);
+        log.info("Created default admin user.");
     }
 }

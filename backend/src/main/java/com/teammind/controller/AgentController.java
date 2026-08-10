@@ -116,6 +116,32 @@ public class AgentController {
     }
 
     /**
+     * 用户评分（真实进化评估闭环）
+     */
+    @PostMapping("/{id}/rate")
+    public ResponseEntity<ApiResponse<AgentDTO>> rateAgent(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        Object ratingObj = body.get("rating");
+        if (ratingObj == null) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Missing 'rating' field"));
+        }
+        double rating = Double.parseDouble(String.valueOf(ratingObj));
+        AgentDTO agent = agentService.rateAgent(id, rating);
+        return ResponseEntity.ok(ApiResponse.success(agent, "Agent rated successfully"));
+    }
+
+    /**
+     * 获取 Agent 真实执行指标（真实进化评估闭环）
+     */
+    @GetMapping("/{id}/metrics")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAgentMetrics(@PathVariable String id) {
+        Map<String, Object> metrics = agentService.getAgentMetrics(id);
+        return ResponseEntity.ok(ApiResponse.success(metrics));
+    }
+
+    /**
      * 回滚进化
      */
     @PostMapping("/{agentId}/evolution/{recordId}/rollback")

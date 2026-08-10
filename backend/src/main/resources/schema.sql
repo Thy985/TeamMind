@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS agents (
     tools TEXT,
     evolution_version INTEGER DEFAULT 1,
     evolution_score REAL,
+    total_missions INTEGER DEFAULT 0,
+    successful_missions INTEGER DEFAULT 0,
+    total_tokens_used INTEGER DEFAULT 0,
+    user_rating REAL,
+    rating_count INTEGER DEFAULT 0,
     installed BOOLEAN DEFAULT FALSE,
     enabled BOOLEAN DEFAULT TRUE,
     installed_at TIMESTAMP,
@@ -109,3 +114,15 @@ CREATE INDEX IF NOT EXISTS idx_llm_calls_provider ON llm_calls(provider);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_agent_id ON llm_calls(agent_id);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_mission_id ON llm_calls(mission_id);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_created_at ON llm_calls(created_at);
+
+-- Users 表（登录/JWT 认证）
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    email TEXT NOT NULL,
+    roles TEXT,
+    permissions TEXT,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP
+);

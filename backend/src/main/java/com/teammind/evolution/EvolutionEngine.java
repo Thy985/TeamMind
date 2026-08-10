@@ -9,6 +9,7 @@ import com.teammind.entity.EvolutionRecord.EvolutionType;
 import com.teammind.llm.LLMResponse;
 import com.teammind.llm.LLMService;
 import com.teammind.repository.EvolutionRecordRepository;
+import com.teammind.service.AgentMetricsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,7 @@ public class EvolutionEngine {
     private final EvolutionRecordRepository evolutionRecordRepository;
     private final LLMService llmService;
     private final ObjectMapper objectMapper;
+    private final AgentMetricsService agentMetricsService;
 
     @Value("${teammind.evolution.enabled:true}")
     private boolean evolutionEnabled;
@@ -133,8 +135,9 @@ public class EvolutionEngine {
                     .build();
         }
 
-        // 计算分数变化
-        double scoreChange = calculatePromptScoreChange(currentPrompt, optimizedPrompt);
+        // ✅ 真实进化评估闭环：用 Agent 真实执行指标（成功率/Token成本/用户评分）
+        // 计算进化收益，替代原有的启发式打分
+        double scoreChange = agentMetricsService.calculateEvolutionBenefit(agent);
 
         // 创建进化记录
         EvolutionRecord record = createEvolutionRecord(
@@ -176,6 +179,9 @@ public class EvolutionEngine {
      * 使用 LLM 生成新的工具代码
      */
     private EvolutionResultDTO generateTool(Agent agent, EvolutionRequest request) {
+        // ✅ 真实进化评估闭环：基于真实指标计算进化收益
+        double scoreChange = agentMetricsService.calculateEvolutionBenefit(agent);
+
         List<Map<String, Object>> currentTools = agent.getTools();
         if (currentTools == null) {
             currentTools = new ArrayList<>();
@@ -238,7 +244,7 @@ public class EvolutionEngine {
                 beforeState,
                 Map.of("tools", currentTools, "newTool", newTool),
                 "Generated new tool: " + newTool.get("name"),
-                0.5,
+                scoreChange,
                 request.getAutomatic() != null ? request.getAutomatic() : false
         );
 
@@ -256,7 +262,7 @@ public class EvolutionEngine {
                 .fromVersion(record.getFromVersion())
                 .toVersion(record.getToVersion())
                 .description(record.getDescription())
-                .scoreChange(0.5)
+                .scoreChange(scoreChange)
                 .success(true)
                 .build();
     }
@@ -267,6 +273,9 @@ public class EvolutionEngine {
      * 使用 LLM 分析并优化多 Agent 协作结构
      */
     private EvolutionResultDTO evolveTopology(Agent agent, EvolutionRequest request) {
+        // ✅ 真实进化评估闭环：基于真实指标计算进化收益
+        double scoreChange = agentMetricsService.calculateEvolutionBenefit(agent);
+
         // 保存进化前状态
         Map<String, Object> beforeState = new LinkedHashMap<>();
         beforeState.put("version", agent.getEvolutionVersion());
@@ -320,7 +329,7 @@ public class EvolutionEngine {
                 beforeState,
                 Map.of("topology", newTopology),
                 "Collaboration topology optimized",
-                0.3,
+                scoreChange,
                 request.getAutomatic() != null ? request.getAutomatic() : false
         );
 
@@ -335,7 +344,7 @@ public class EvolutionEngine {
                 .fromVersion(record.getFromVersion())
                 .toVersion(record.getToVersion())
                 .description(record.getDescription())
-                .scoreChange(0.3)
+                .scoreChange(scoreChange)
                 .success(true)
                 .build();
     }
@@ -344,6 +353,9 @@ public class EvolutionEngine {
      * 参数调优
      */
     private EvolutionResultDTO tuneParameters(Agent agent, EvolutionRequest request) {
+        // ✅ 真实进化评估闭环：基于真实指标计算进化收益
+        double scoreChange = agentMetricsService.calculateEvolutionBenefit(agent);
+
         // 使用 LLM 进行参数调优
         String systemPrompt = """
                 You are an expert in hyperparameter optimization for AI agents.
@@ -381,7 +393,7 @@ public class EvolutionEngine {
                 .fromVersion(agent.getEvolutionVersion())
                 .toVersion(agent.getEvolutionVersion() + 1)
                 .description("Parameters tuned: " + llmResponse.getContent())
-                .scoreChange(0.2)
+                .scoreChange(scoreChange)
                 .success(true)
                 .build();
     }
@@ -390,6 +402,9 @@ public class EvolutionEngine {
      * 知识更新
      */
     private EvolutionResultDTO updateKnowledge(Agent agent, EvolutionRequest request) {
+        // ✅ 真实进化评估闭环：基于真实指标计算进化收益
+        double scoreChange = agentMetricsService.calculateEvolutionBenefit(agent);
+
         String knowledgeContent = request.getContext() != null ? 
                 String.valueOf(request.getContext().get("knowledge")) : "";
         
@@ -429,7 +444,7 @@ public class EvolutionEngine {
                 Map.of("previousKnowledge", "old"),
                 Map.of("newKnowledge", llmResponse.getContent()),
                 "Knowledge updated",
-                0.1,
+                scoreChange,
                 request.getAutomatic() != null ? request.getAutomatic() : false
         );
         
@@ -442,7 +457,7 @@ public class EvolutionEngine {
                 .fromVersion(record.getFromVersion())
                 .toVersion(record.getToVersion())
                 .description("Knowledge updated successfully")
-                .scoreChange(0.1)
+                .scoreChange(scoreChange)
                 .success(true)
                 .build();
     }
@@ -476,44 +491,6 @@ public class EvolutionEngine {
         }
         
         return feedback.toString();
-    }
-
-    /**
-     * 计算 Prompt 优化分数变化
-     */
-    private double calculatePromptScoreChange(String oldPrompt, String newPrompt) {
-        double score = 0.0;
-        
-        // 长度改进（更详细但不冗长）
-        int oldLen = oldPrompt.length();
-        int newLen = newPrompt.length();
-        if (newLen > oldLen && newLen < oldLen * 2) {
-            score += 0.1;  // 适当的扩展
-        }
-        
-        // 结构化改进
-        if (newPrompt.contains("##") || newPrompt.contains("###")) {
-            score += 0.15;  // 添加了章节结构
-        }
-        if (newPrompt.contains("- ") || newPrompt.contains("* ")) {
-            score += 0.1;  // 添加了列表
-        }
-        if (newPrompt.contains("```")) {
-            score += 0.1;  // 添加了代码块
-        }
-        if (newPrompt.toLowerCase().contains("error") || newPrompt.toLowerCase().contains("exception")) {
-            score += 0.1;  // 添加了错误处理指导
-        }
-        
-        // 关键词改进
-        if (newPrompt.toLowerCase().contains("output format")) {
-            score += 0.1;
-        }
-        if (newPrompt.toLowerCase().contains("example")) {
-            score += 0.1;
-        }
-        
-        return Math.min(0.8, score);  // 最高 0.8
     }
 
     /**

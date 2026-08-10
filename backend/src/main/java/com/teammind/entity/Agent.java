@@ -92,6 +92,35 @@ public class Agent {
     private Double evolutionScore;
 
     /**
+     * 真实执行指标 - 累计任务总数
+     */
+    @Builder.Default
+    private Long totalMissions = 0L;
+
+    /**
+     * 真实执行指标 - 成功任务数
+     */
+    @Builder.Default
+    private Long successfulMissions = 0L;
+
+    /**
+     * 真实执行指标 - 累计 Token 消耗
+     */
+    @Builder.Default
+    private Long totalTokensUsed = 0L;
+
+    /**
+     * 真实执行指标 - 用户评分（0~5，累计求均值）
+     */
+    private Double userRating;
+
+    /**
+     * 真实执行指标 - 评分次数
+     */
+    @Builder.Default
+    private Long ratingCount = 0L;
+
+    /**
      * 是否安装
      */
     @Builder.Default
