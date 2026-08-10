@@ -1,0 +1,101 @@
+# TeamMind CI 流水线配置
+# 前端：Vue3 + TypeScript + Vite + Vitest + ESLint（Node 22）
+# 后端：Spring Boot 3.2 + Java 17 + Maven
+
+# === 公共配置（YAML 锚点，供复用） ===
+
+# 前端构建环境
+.frontend-env: &frontend-env
+  runner:
+    cpus: 4
+  docker:
+    image: node:22
+    volumes:
+      - frontend_node_modules
+
+# 后端构建环境
+.backend-env: &backend-env
+  runner:
+    cpus: 8
+  docker:
+    image: maven:3.9-eclipse-temurin-17
+    volumes:
+      - backend_m2_repo
+
+# 前端依赖安装
+.frontend-install: &frontend-install
+  name: install
+  script: npm ci --frozen-lockfile
+
+# 后端依赖编译
+.backend-install: &backend-install
+  name: compile
+  script: mvn -B -q compile
+
+# === 触发规则 ===
+
+# main 分支 push：完整构建与测试
+main:
+  push:
+    - name: frontend-ci
+      <<: *frontend-env
+      stages:
+        - *frontend-install
+        - name: lint
+          script: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+        - name: test
+          script: npm run test:coverage
+        - name: build
+          script: npm run build
+    - name: backend-ci
+      <<: *backend-env
+      stages:
+        - *backend-install
+        - name: package
+          script: mvn -B package
+        - name: test
+          script: mvn -B test
+
+# 任意分支 PR：做基础质量检查（lint + 测试 + 构建）
+"feature/*":
+  pull_request:
+    - name: frontend-check
+      <<: *frontend-env
+      stages:
+        - *frontend-install
+        - name: lint
+          script: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+        - name: test
+          script: npm run test:coverage
+        - name: build
+          script: npm run build
+    - name: backend-check
+      <<: *backend-env
+      stages:
+        - *backend-install
+        - name: package
+          script: mvn -B package
+        - name: test
+          script: mvn -B test
+
+# 兜底分支（其他任意分支 push 也跑基础检查）
+$:
+  push:
+    - name: frontend-check
+      <<: *frontend-env
+      stages:
+        - *frontend-install
+        - name: lint
+          script: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+        - name: test
+          script: npm run test:coverage
+        - name: build
+          script: npm run build
+    - name: backend-check
+      <<: *backend-env
+      stages:
+        - *backend-install
+        - name: package
+          script: mvn -B package
+        - name: test
+          script: mvn -B test
