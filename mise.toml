@@ -1,0 +1,6 @@
+[tools]
+node = "22"
+
+[tasks.info]
+description = "Report the project runtime without changing files"
+run = "node -e \"console.log(JSON.stringify({cwd: process.cwd(), node: process.version, npm: require('child_process').execFileSync('npm.cmd', ['--version'], {encoding: 'utf8'}).trim()}, null, 2))\""
