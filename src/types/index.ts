@@ -188,18 +188,22 @@ export interface AppSettings {
 
 // ==================== WebSocket 事件 ====================
 
-/** WebSocket 事件类型 */
+/** WebSocket 事件类型（对齐后端 WSEvent 常量） */
 export type WSEventType = 
+  // 后端 WSEvent 标准事件
   | 'mission_started'
   | 'mission_completed'
   | 'mission_failed'
-  | 'mission_updated'
   | 'agent_spawned'
   | 'agent_status_update'
   | 'node_update'
   | 'log'
   | 'resolution_required'
   | 'resolution_resolved'
+  | 'evolution_triggered'
+  | 'evolution_completed'
+  // 遗留/兼容事件
+  | 'mission_updated'
   | 'ping'
   | 'pong'
   | 'collaboration:join'
@@ -211,12 +215,23 @@ export type WSEventType =
   | 'mission:completed'
   | 'mission:failed'
 
-/** WebSocket 事件 */
+/**
+ * WebSocket 事件（对齐后端 WSEvent 结构）
+ * 后端 WSEventPublisher 发送的 JSON 结构：
+ * {
+ *   type: string,
+ *   missionId?: string,
+ *   timestamp?: string,
+ *   payload?: Record<string, unknown>
+ * }
+ */
 export interface WSEvent {
   type: WSEventType
   missionId?: string
   timestamp?: string
+  /** 事件载荷（与后端 WSEvent.payload 对齐） */
   payload?: Record<string, unknown>
+  /** 兼容旧代码：部分前端代码使用 data 字段 */
   data?: Record<string, unknown>
 }
 

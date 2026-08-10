@@ -13,6 +13,7 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.3.0",
     "@vicons/ionicons5": "^0.13.0",
     "@vue-flow/background": "^1.3.2",
     "@vue-flow/controls": "^1.1.3",
@@ -21,6 +22,7 @@
     "axios": "^1.13.6",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",
+    "sockjs-client": "^1.6.1",
     "vue": "^3.5.30",
     "vue-router": "^4.6.4",
     "zod": "^3.25.76"
@@ -28,12 +30,14 @@
   "devDependencies": {
     "@testing-library/vue": "^8.0.0",
     "@types/node": "^24.12.0",
+    "@types/sockjs-client": "^1.5.4",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vitest/ui": "^1.0.0",
     "@vue/test-utils": "^2.4.0",
     "@vue/tsconfig": "^0.9.0",
     "eslint": "^8.54.0",
     "eslint-plugin-vue": "^9.18.1",
+    "jsdom": "^30.0.1",
     "typescript": "~5.9.3",
     "vite": "^8.0.1",
     "vitest": "^1.0.0",

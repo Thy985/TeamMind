@@ -9,7 +9,7 @@ import type { WSEvent, WSEventType } from '@/types'
 export function useWebSocketListener(
   eventType: string | string[],
   handler: (event: WSEvent) => void,
-  options?: { immediate?: boolean }
+  options?: { immediate?: boolean; missionId?: string }
 ) {
   const isListening = ref(false)
 
@@ -22,8 +22,8 @@ export function useWebSocketListener(
     isListening.value = true
 
     if (options?.immediate) {
-      // 如果需要立即连接
-      wsManager.connect().catch(console.error)
+      // 如果需要立即连接，携带 missionId 以订阅任务专属频道
+      wsManager.connect(options.missionId).catch(console.error)
     }
   })
 

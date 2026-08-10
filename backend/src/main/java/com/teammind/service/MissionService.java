@@ -182,6 +182,53 @@ public class MissionService {
         mission.setUpdatedAt(LocalDateTime.now());
         mission = missionRepository.save(mission);
 
+        // ✅ 同步暂停运行时：让执行循环感知暂停状态
+        runtimeManager.pauseMission(id);
+
+        return toDTO(mission);
+    }
+
+    /**
+     * 恢复任务
+     */
+    @Transactional
+    public MissionDTO resumeMission(String id) {
+        Mission mission = missionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Mission not found: " + id));
+
+        if (mission.getStatus() != MissionStatus.PAUSED) {
+            throw new RuntimeException("Mission cannot be resumed from status: " + mission.getStatus());
+        }
+
+        mission.setStatus(MissionStatus.RUNNING);
+        mission.setUpdatedAt(LocalDateTime.now());
+        mission = missionRepository.save(mission);
+
+        // ✅ 同步恢复运行时
+        runtimeManager.resumeMission(id);
+
+        return toDTO(mission);
+    }
+
+    /**
+     * 取消任务
+     */
+    @Transactional
+    public MissionDTO cancelMission(String id) {
+        Mission mission = missionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Mission not found: " + id));
+
+        if (mission.getStatus() == MissionStatus.COMPLETED || mission.getStatus() == MissionStatus.FAILED) {
+            throw new RuntimeException("Mission cannot be cancelled from status: " + mission.getStatus());
+        }
+
+        mission.setStatus(MissionStatus.FAILED);
+        mission.setUpdatedAt(LocalDateTime.now());
+        mission = missionRepository.save(mission);
+
+        // ✅ 同步取消运行时：让执行循环感知取消状态并传播取消
+        runtimeManager.cancelMission(id);
+
         return toDTO(mission);
     }
 

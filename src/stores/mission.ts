@@ -197,6 +197,21 @@ export const useMissionStore = defineStore('mission', () => {
   }
 
   /**
+   * 恢复任务
+   */
+  async function resumeMission(id: string) {
+    try {
+      const response = await missionApi.resume(id)
+      if (response.success) {
+        await fetchMission(id)
+      }
+    } catch (error) {
+      console.error('Failed to resume mission:', error)
+      throw error
+    }
+  }
+
+  /**
    * 运行任务
    */
   async function runMission(id: string) {
@@ -314,6 +329,7 @@ export const useMissionStore = defineStore('mission', () => {
     cloneMission,
     startMission,
     pauseMission,
+    resumeMission,
     runMission,
     cancelMission,
     retryNode,

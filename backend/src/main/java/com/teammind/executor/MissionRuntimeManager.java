@@ -1,5 +1,6 @@
 package com.teammind.executor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teammind.entity.Agent;
 import com.teammind.entity.Mission;
 import com.teammind.llm.LLMTrackingService;
@@ -81,6 +82,17 @@ public class MissionRuntimeManager {
             // 执行任务
             executeMission(runtime);
 
+            // ✅ 检查是否被取消
+            if (runtime.isCancelled()) {
+                log.info("Mission was cancelled: {}", missionId);
+                mission.setStatus(Mission.MissionStatus.FAILED);
+                mission.setUpdatedAt(LocalDateTime.now());
+                missionRepository.save(mission);
+                addLog(mission, "warning", null, "Mission was cancelled by user");
+                eventPublisher.publishMissionFailed(missionId);
+                return;
+            }
+
             // 标记完成
             mission.setStatus(Mission.MissionStatus.COMPLETED);
             mission.setCompletedAt(LocalDateTime.now());
@@ -107,6 +119,9 @@ public class MissionRuntimeManager {
             // 添加错误日志
             addLog(mission, "error", null, "Mission failed: " + e.getMessage());
 
+            // ✅ 发布任务失败事件
+            eventPublisher.publishMissionFailed(missionId, e.getMessage());
+
         } finally {
             activeMissions.remove(missionId);
         }
@@ -128,8 +143,8 @@ public class MissionRuntimeManager {
             return;
         }
 
-        // 拓扑排序执行
-        executeWithTopology(runtime, nodes, edges);
+        // ✅ 切换为并行执行：使用有界线程池并行执行独立节点
+        executeWithTopologyParallel(runtime, nodes, edges);
     }
 
     /**
@@ -139,6 +154,25 @@ public class MissionRuntimeManager {
         Mission mission = runtime.getMission();
 
         log.info("Executing simple mission: {}", mission.getId());
+
+        // ✅ 检查暂停/取消状态
+        if (runtime.isCancelled()) {
+            log.info("Mission cancelled before execution: {}", mission.getId());
+            return;
+        }
+        while (runtime.isPaused() && !runtime.isCancelled()) {
+            log.debug("Mission paused, waiting: {}", mission.getId());
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        if (runtime.isCancelled()) {
+            log.info("Mission cancelled while paused: {}", mission.getId());
+            return;
+        }
 
         // 使用默认 Agent
         List<Agent> agents = agentRepository.findByInstalledTrueAndEnabledTrue();
@@ -158,8 +192,27 @@ public class MissionRuntimeManager {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        // 执行
-        AgentExecutionResult result = executionEngine.execute(context).join();
+        // 执行（带超时保护 + 取消传播）
+        CompletableFuture<AgentExecutionResult> execFuture = executionEngine.execute(context);
+        AgentExecutionResult result;
+        try {
+            result = execFuture.get(context.getTimeoutMs(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            execFuture.cancel(true);
+            log.error("Simple mission execution timeout: {}", mission.getId());
+            result = AgentExecutionResult.failure(context.getExecutionId(), primaryAgent.getId(),
+                    "Execution timeout after " + context.getTimeoutMs() + "ms");
+        } catch (InterruptedException e) {
+            execFuture.cancel(true);
+            Thread.currentThread().interrupt();
+            log.error("Simple mission execution interrupted: {}", mission.getId());
+            result = AgentExecutionResult.failure(context.getExecutionId(), primaryAgent.getId(),
+                    "Execution interrupted");
+        } catch (ExecutionException e) {
+            log.error("Simple mission execution failed: {}", mission.getId(), e.getCause());
+            result = AgentExecutionResult.failure(context.getExecutionId(), primaryAgent.getId(),
+                    "Execution failed: " + e.getCause().getMessage());
+        }
 
         // 记录结果
         runtime.addResult(primaryAgent.getId(), result);
@@ -190,6 +243,30 @@ public class MissionRuntimeManager {
         Map<String, AgentExecutionResult> results = new ConcurrentHashMap<>();
 
         for (String nodeId : executionOrder) {
+            // ✅ 检查暂停/取消状态
+            if (runtime.isCancelled()) {
+                log.info("Mission cancelled, stopping execution: {}", mission.getId());
+                addLog(mission, "warning", null, "Mission cancelled by user");
+                break;
+            }
+
+            // 如果暂停，等待恢复或取消
+            while (runtime.isPaused() && !runtime.isCancelled()) {
+                log.debug("Mission paused, waiting to resume: {}", mission.getId());
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+
+            if (runtime.isCancelled()) {
+                log.info("Mission cancelled while paused, stopping: {}", mission.getId());
+                addLog(mission, "warning", null, "Mission cancelled by user");
+                break;
+            }
+
             // 找到节点
             Map<String, Object> node = nodes.stream()
                     .filter(n -> nodeId.equals(n.get("id")))
@@ -225,13 +302,15 @@ public class MissionRuntimeManager {
                             .createdAt(LocalDateTime.now())
                             .build();
 
-                    // ✅ 修复：添加超时保护
+                    // ✅ 修复：添加超时保护 + 取消传播
                     AgentExecutionResult result;
+                    CompletableFuture<AgentExecutionResult> execFuture = executionEngine.execute(context);
                     try {
-                        result = executionEngine.execute(context)
-                            .get(context.getTimeoutMs(), TimeUnit.MILLISECONDS);
+                        result = execFuture.get(context.getTimeoutMs(), TimeUnit.MILLISECONDS);
                     } catch (TimeoutException e) {
                         log.error("Node execution timeout: {} ({}ms)", nodeId, context.getTimeoutMs());
+                        // ✅ 取消传播：取消执行 Future
+                        execFuture.cancel(true);
                         result = AgentExecutionResult.builder()
                             .executionId(context.getExecutionId())
                             .agentId(context.getAgentId())
@@ -246,6 +325,8 @@ public class MissionRuntimeManager {
                     } catch (InterruptedException e) {
                         log.error("Node execution interrupted: {}", nodeId);
                         Thread.currentThread().interrupt();
+                        // ✅ 取消传播：取消执行 Future
+                        execFuture.cancel(true);
                         result = AgentExecutionResult.builder()
                             .executionId(context.getExecutionId())
                             .agentId(context.getAgentId())
@@ -421,7 +502,7 @@ public class MissionRuntimeManager {
         }
 
         // 找到所有入度为 0 的节点（可以立即执行）
-        Queue<String> readyNodes = new LinkedList<>();
+        Queue<String> readyNodes = new ConcurrentLinkedQueue<>();
         for (String nodeId : inDegree.keySet()) {
             if (inDegree.get(nodeId) == 0) {
                 readyNodes.offer(nodeId);
@@ -431,9 +512,38 @@ public class MissionRuntimeManager {
         // 执行结果和 Future
         Map<String, AgentExecutionResult> results = new ConcurrentHashMap<>();
         Map<String, CompletableFuture<AgentExecutionResult>> futures = new ConcurrentHashMap<>();
+        // ✅ 新增：跟踪内部执行 Future 以便取消传播
+        Map<String, CompletableFuture<AgentExecutionResult>> innerFutures = new ConcurrentHashMap<>();
 
         // 执行就绪的节点
         while (!readyNodes.isEmpty()) {
+            // ✅ 检查暂停/取消状态
+            if (runtime.isCancelled()) {
+                log.info("Mission cancelled, stopping parallel execution: {}", mission.getId());
+                addLog(mission, "warning", null, "Mission cancelled by user");
+                // ✅ 取消传播：取消所有进行中的执行 Future
+                futures.values().forEach(f -> f.cancel(true));
+                break;
+            }
+
+            // 如果暂停，等待恢复或取消
+            while (runtime.isPaused() && !runtime.isCancelled()) {
+                log.debug("Mission paused, waiting to resume: {}", mission.getId());
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+
+            if (runtime.isCancelled()) {
+                log.info("Mission cancelled while paused, stopping: {}", mission.getId());
+                addLog(mission, "warning", null, "Mission cancelled by user");
+                futures.values().forEach(f -> f.cancel(true));
+                break;
+            }
+
             String nodeId = readyNodes.poll();
 
             // 找到节点
@@ -472,8 +582,14 @@ public class MissionRuntimeManager {
                                 .build();
 
                         try {
-                            return executionEngine.execute(context)
-                                .get(context.getTimeoutMs(), TimeUnit.MILLISECONDS);
+                            // ✅ 存储内部执行 Future 以便取消传播
+                            CompletableFuture<AgentExecutionResult> inner = executionEngine.execute(context);
+                            innerFutures.put(nodeId, inner);
+                            try {
+                                return inner.get(context.getTimeoutMs(), TimeUnit.MILLISECONDS);
+                            } finally {
+                                innerFutures.remove(nodeId);
+                            }
                         } catch (TimeoutException e) {
                             log.error("Node execution timeout: {}", nodeId);
                             return AgentExecutionResult.builder()
@@ -513,7 +629,14 @@ public class MissionRuntimeManager {
                     } else if ("output".equals(nodeType)) {
                         Map<String, Object> finalOutput = collectDependencyOutputs(nodeId, dependencies, results);
                         mission.setResult(finalOutput);
-                        return AgentExecutionResult.success(UUID.randomUUID().toString(), "output", finalOutput);
+                        // 将 Map 转为 JSON 字符串作为 response
+                        try {
+                            String outputJson = new ObjectMapper().writeValueAsString(finalOutput);
+                            return AgentExecutionResult.success(UUID.randomUUID().toString(), "output", outputJson);
+                        } catch (Exception ex) {
+                            return AgentExecutionResult.success(UUID.randomUUID().toString(), "output",
+                                    finalOutput != null ? finalOutput.toString() : "");
+                        }
                     } else {
                         log.warn("Unknown node type: {}", nodeType);
                         return AgentExecutionResult.failure(UUID.randomUUID().toString(), "unknown", "Unknown type");
@@ -529,6 +652,25 @@ public class MissionRuntimeManager {
 
             // 当节点完成时，检查其依赖节点
             future.thenAccept(result -> {
+                // ✅ 检查取消状态：如果任务已取消，不再继续调度后续节点
+                if (runtime.isCancelled()) {
+                    log.debug("Mission cancelled, skipping dependent scheduling for node: {}", nodeId);
+                    return;
+                }
+
+                // ✅ 如果暂停，等待恢复或取消后再调度依赖节点
+                while (runtime.isPaused() && !runtime.isCancelled()) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+                if (runtime.isCancelled()) {
+                    return;
+                }
+
                 results.put(nodeId, result);
                 String newStatus = result.isSuccess() ? "success" : "error";
                 updateNodeStatus(mission, nodeId, newStatus);
@@ -545,26 +687,62 @@ public class MissionRuntimeManager {
                     int newInDegree = inDegree.get(dependent) - 1;
                     inDegree.put(dependent, newInDegree);
 
-                    if (newInDegree == 0) {
+                    if (newInDegree == 0 && !runtime.isCancelled()) {
                         readyNodes.offer(dependent);
                     }
                 }
             });
         }
 
-        // 等待所有节点完成
-        try {
-            CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]))
-                .get(5, TimeUnit.MINUTES);
-        } catch (TimeoutException e) {
-            log.error("Mission execution timeout");
-            mission.setStatus(Mission.MissionStatus.FAILED);
-            addLog(mission, "error", null, "Mission execution timeout");
-        } catch (InterruptedException e) {
-            log.error("Mission execution interrupted");
-            Thread.currentThread().interrupt();
-        } catch (ExecutionException e) {
-            log.error("Mission execution failed", e.getCause());
+        // 等待所有节点完成（同时检查暂停/取消状态）
+        while (!futures.isEmpty()) {
+            // ✅ 检查取消状态
+            if (runtime.isCancelled()) {
+                log.info("Mission cancelled during execution wait: {}", mission.getId());
+                futures.values().forEach(f -> f.cancel(true));
+                innerFutures.values().forEach(f -> f.cancel(true));
+                break;
+            }
+
+            // 如果暂停，等待恢复或取消
+            while (runtime.isPaused() && !runtime.isCancelled() && !futures.isEmpty()) {
+                log.debug("Mission paused during execution wait: {}", mission.getId());
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+
+            try {
+                CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]))
+                    .get(500, TimeUnit.MILLISECONDS);
+                break; // 全部完成
+            } catch (TimeoutException e) {
+                // 超时，继续检查暂停/取消
+                continue;
+            } catch (InterruptedException e) {
+                log.error("Mission execution interrupted");
+                Thread.currentThread().interrupt();
+                break;
+            } catch (ExecutionException e) {
+                log.error("Mission execution failed", e.getCause());
+                break;
+            }
+        }
+
+        // 最终检查：如果执行超时（5分钟）
+        if (!runtime.isCancelled() && !futures.isEmpty()) {
+            try {
+                CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]))
+                    .get(1, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                log.error("Mission execution timeout");
+                mission.setStatus(Mission.MissionStatus.FAILED);
+                addLog(mission, "error", null, "Mission execution timeout");
+                futures.values().forEach(f -> f.cancel(true));
+            }
         }
     }
 
@@ -593,6 +771,8 @@ public class MissionRuntimeManager {
     }
 
     /**
+     * 更新节点状态
+     */
     private void updateNodeStatus(Mission mission, String nodeId, String status) {
         List<Map<String, Object>> nodes = mission.getNodes();
         if (nodes == null) return;

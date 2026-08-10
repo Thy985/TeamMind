@@ -100,6 +100,24 @@ public class MissionController {
     }
 
     /**
+     * 恢复任务
+     */
+    @PostMapping("/{id}/resume")
+    public ResponseEntity<ApiResponse<MissionDTO>> resumeMission(@PathVariable String id) {
+        MissionDTO mission = missionService.resumeMission(id);
+        return ResponseEntity.ok(ApiResponse.success(mission, "Mission resumed"));
+    }
+
+    /**
+     * 取消任务
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<MissionDTO>> cancelMission(@PathVariable String id) {
+        MissionDTO mission = missionService.cancelMission(id);
+        return ResponseEntity.ok(ApiResponse.success(mission, "Mission cancelled"));
+    }
+
+    /**
      * 重试节点
      */
     @PostMapping("/{id}/nodes/{nodeId}/retry")

@@ -65,14 +65,15 @@ export function useCollaboration() {
    */
   async function connect(missionId: string) {
     try {
-      await wsManager.connect()
+      // 携带 missionId 连接，自动订阅 /topic/missions/{id}
+      await wsManager.connect(missionId)
       
       state.value.isConnected = true
 
       // 加入任务协作
       wsManager.send({
         type: 'collaboration:join',
-        data: { missionId }
+        payload: { missionId }
       })
 
       // 监听协作事件
@@ -99,7 +100,8 @@ export function useCollaboration() {
   function setupEventListeners() {
     // 用户加入
     wsManager.on('collaboration:user-joined', (event: WSEvent) => {
-      const user = event.data as unknown as CollaborationUser
+      const user = (event.payload || event.data) as unknown as CollaborationUser
+      if (!user) return
       state.value.users.push(user)
       state.value.onlineCount = state.value.users.length
 
@@ -114,47 +116,51 @@ export function useCollaboration() {
 
     // 用户离开
     wsManager.on('collaboration:user-left', (event: WSEvent) => {
-      const { userId } = event.data as { userId: string }
+      const data = (event.payload || event.data) as Record<string, unknown>
+      const userId = String(data?.userId || '')
       state.value.users = state.value.users.filter(u => u.id !== userId)
       state.value.onlineCount = state.value.users.length
     })
 
     // 光标移动
     wsManager.on('collaboration:cursor-move', (event: WSEvent) => {
-      const { userId, cursor } = event.data as { userId: string; cursor: { x: number; y: number } }
-      const user = state.value.users.find(u => u.id === userId)
-      if (user) {
-        user.cursor = cursor
+      const data = (event.payload || event.data) as { userId?: string; cursor?: { x: number; y: number } }
+      const user = state.value.users.find(u => u.id === data?.userId)
+      if (user && data?.cursor) {
+        user.cursor = data.cursor
       }
     })
 
     // 任务更新
     wsManager.on('mission:updated', (event: WSEvent) => {
+      const data = (event.payload || event.data) as Record<string, unknown>
       addNotification({
         type: 'info',
         title: '任务更新',
         message: '任务已被更新',
-        link: `/missions/${event.data?.id}`
+        link: `/missions/${String(data?.id || event.missionId || '')}`
       })
     })
 
     // 任务完成
     wsManager.on('mission:completed', (event: WSEvent) => {
+      const data = (event.payload || event.data) as Record<string, unknown>
       addNotification({
         type: 'success',
         title: '🎉 任务完成',
         message: '任务执行成功完成',
-        link: `/missions/${event.data?.id}`
+        link: `/missions/${String(data?.id || event.missionId || '')}`
       })
     })
 
     // 任务失败
     wsManager.on('mission:failed', (event: WSEvent) => {
+      const data = (event.payload || event.data) as Record<string, unknown>
       addNotification({
         type: 'error',
         title: '❌ 任务失败',
-        message: String((event.data as any)?.error || '任务执行失败'),
-        link: `/missions/${(event.data as any)?.id}`
+        message: String(data?.error || '任务执行失败'),
+        link: `/missions/${String(data?.id || event.missionId || '')}`
       })
     })
   }
@@ -167,7 +173,7 @@ export function useCollaboration() {
 
     wsManager.send({
       type: 'collaboration:cursor-move',
-      data: { cursor: { x, y } }
+      payload: { cursor: { x, y } }
     })
   }
 
@@ -179,7 +185,7 @@ export function useCollaboration() {
 
     wsManager.send({
       type: 'collaboration:operation',
-      data: { operation, data }
+      payload: { operation, data }
     })
   }
 

@@ -40,6 +40,23 @@ public class WSEventPublisher {
     }
 
     /**
+     * 发布任务失败事件
+     */
+    public void publishMissionFailed(String missionId, String error) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("missionId", missionId);
+        payload.put("error", error);
+        publish(WSEvent.of(WSEvent.MISSION_FAILED, missionId, payload));
+    }
+
+    /**
+     * 发布任务失败事件（无错误信息重载）
+     */
+    public void publishMissionFailed(String missionId) {
+        publishMissionFailed(missionId, null);
+    }
+
+    /**
      * 发布 Agent 创建事件
      */
     public void publishAgentSpawned(String missionId, String agentId, String agentName) {

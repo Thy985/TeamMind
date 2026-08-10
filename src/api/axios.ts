@@ -178,6 +178,8 @@ export const missionApi = {
 
   pause: (id: string) => api.post(`/missions/${id}/pause`),
 
+  resume: (id: string) => api.post(`/missions/${id}/resume`),
+
   run: (id: string) => api.post(`/missions/${id}/run`, {}, { retryable: true }),
 
   cancel: (id: string) => api.post(`/missions/${id}/cancel`),

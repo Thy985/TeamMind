@@ -114,15 +114,6 @@ public class ExecutionController {
     }
 
     /**
-     * 取消任务
-     */
-    @PostMapping("/missions/{id}/cancel")
-    public ResponseEntity<ApiResponse<Void>> cancelMission(@PathVariable String id) {
-        runtimeManager.cancelMission(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "Mission cancelled"));
-    }
-
-    /**
      * 获取任务运行状态
      */
     @GetMapping("/missions/{id}/runtime")

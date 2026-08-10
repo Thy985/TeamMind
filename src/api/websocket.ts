@@ -1,5 +1,7 @@
+import { Client, type IMessage, type StompSubscription } from '@stomp/stompjs'
+import SockJS from 'sockjs-client'
 import type { WSEvent } from '@/types'
-import { retryWithBackoff, AppError } from '@/utils/errorHandler'
+import { AppError } from '@/utils/errorHandler'
 
 type EventHandler = (event: WSEvent) => void
 type ConnectionHandler = () => void
@@ -13,15 +15,23 @@ interface WebSocketOptions {
   heartbeatInterval?: number
 }
 
+/**
+ * STOMP over SockJS WebSocket Manager
+ *
+ * 与后端 WebSocketConfig (/ws + SockJS) 对齐：
+ * - 连接 /ws（SockJS 端点）
+ * - 订阅 /topic/events 获取全局事件
+ * - 订阅 /topic/missions/{id} 获取任务专属事件
+ * - 事件结构对齐后端 WSEventPublisher: { type, missionId, timestamp, payload }
+ */
 class WebSocketManager {
-  private ws: WebSocket | null = null
+  private client: Client | null = null
   private url: string
   private reconnect: boolean
   private reconnectInterval: number
   private maxReconnectAttempts: number
-  private reconnectAttempts = 0
   private heartbeatInterval: number
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private reconnectAttempts = 0
   private isConnecting = false
   private eventHandlers: Map<string, Set<EventHandler>> = new Map()
   private connectionHandlers: Set<ConnectionHandler> = new Set()
@@ -29,72 +39,83 @@ class WebSocketManager {
   private errorHandlers: Set<ErrorHandler> = new Set()
   private messageQueue: WSEvent[] = []
   private isConnected = false
+  private subscriptions: StompSubscription[] = []
+  private missionId: string | null = null
 
   constructor(options: WebSocketOptions = {}) {
-    this.url = options.url || import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws'
+    // SockJS 需要 HTTP(S) 协议端点，而非 ws://
+    this.url = options.url || import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws'
     this.reconnect = options.reconnect ?? true
     this.reconnectInterval = options.reconnectInterval ?? 3000
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? 5
     this.heartbeatInterval = options.heartbeatInterval ?? 30000
+
+    // 规范化 URL：将 ws:// 或 wss:// 转为 http:// 或 https://（SockJS 需要 HTTP 握手）
+    this.url = this.url.replace(/^ws:/, 'http:').replace(/^wss:/, 'https:')
   }
 
-  connect(): Promise<void> {
+  connect(missionId?: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
+      if (this.isConnected) {
         resolve()
         return
       }
 
       if (this.isConnecting) {
-        reject(new Error('Connection in progress'))
+        reject(new AppError('Connection in progress', 'WEBSOCKET_ERROR'))
         return
       }
 
       this.isConnecting = true
+      if (missionId) {
+        this.missionId = missionId
+      }
 
       try {
-        this.ws = new WebSocket(this.url)
+        // 创建 SockJS 连接
+        const socket = new SockJS(this.url)
 
-        this.ws.onopen = () => {
-          console.log('[WebSocket] Connected')
+        // 创建 STOMP Client
+        this.client = new Client({
+          webSocketFactory: () => socket,
+          reconnectDelay: this.reconnect ? this.reconnectInterval : 0,
+          heartbeatIncoming: this.heartbeatInterval,
+          heartbeatOutgoing: this.heartbeatInterval,
+          debug: (str) => {
+            if (import.meta.env.DEV) {
+              console.debug('[STOMP]', str)
+            }
+          }
+        })
+
+        this.client.onConnect = (frame) => {
+          console.log('[WebSocket] STOMP connected')
           this.isConnecting = false
           this.isConnected = true
           this.reconnectAttempts = 0
-          this.startHeartbeat()
+          this.setupSubscriptions()
           this.flushMessageQueue()
           this.connectionHandlers.forEach(handler => handler())
           resolve()
         }
 
-        this.ws.onclose = (event) => {
-          console.log('[WebSocket] Disconnected', event.code, event.reason)
+        this.client.onWebSocketClose = (event) => {
+          console.log('[WebSocket] Disconnected', event?.code, event?.reason)
           this.isConnecting = false
           this.isConnected = false
-          this.stopHeartbeat()
           this.disconnectionHandlers.forEach(handler => handler())
+        }
 
-          if (this.reconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.reconnectAttempts++
-            console.log(`[WebSocket] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
-            setTimeout(() => this.connect().catch(console.error), this.reconnectInterval)
+        this.client.onStompError = (frame) => {
+          console.error('[WebSocket] STOMP error:', frame.headers['message'])
+          this.errorHandlers.forEach(handler => handler(new Event('stomp-error')))
+          if (this.isConnecting) {
+            this.isConnecting = false
+            reject(new AppError('STOMP connection error: ' + frame.headers['message'], 'WEBSOCKET_ERROR'))
           }
         }
 
-        this.ws.onerror = (error) => {
-          console.error('[WebSocket] Error:', error)
-          this.isConnecting = false
-          this.errorHandlers.forEach(handler => handler(error))
-          reject(new AppError('WebSocket 连接失败', 'WEBSOCKET_ERROR'))
-        }
-
-        this.ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data) as WSEvent
-            this.handleEvent(data)
-          } catch (e) {
-            console.error('[WebSocket] Failed to parse message:', e)
-          }
-        }
+        this.client.activate()
       } catch (error) {
         this.isConnecting = false
         reject(error)
@@ -102,33 +123,62 @@ class WebSocketManager {
     })
   }
 
+  /**
+   * 设置 STOMP 订阅
+   * - /topic/events: 全局事件广播
+   * - /topic/missions/{missionId}: 任务专属事件
+   */
+  private setupSubscriptions() {
+    if (!this.client || !this.isConnected) return
+
+    // 清理旧订阅
+    this.subscriptions.forEach(sub => {
+      try { sub.unsubscribe() } catch (_) { /* ignore */ }
+    })
+    this.subscriptions = []
+
+    // 订阅全局事件
+    const globalSub = this.client.subscribe('/topic/events', (message: IMessage) => {
+      this.handleStompMessage(message)
+    })
+    this.subscriptions.push(globalSub)
+
+    // 订阅任务专属事件
+    if (this.missionId) {
+      const missionSub = this.client.subscribe(`/topic/missions/${this.missionId}`, (message: IMessage) => {
+        this.handleStompMessage(message)
+      })
+      this.subscriptions.push(missionSub)
+    }
+  }
+
+  /**
+   * 解析 STOMP 消息为 WSEvent
+   */
+  private handleStompMessage(message: IMessage) {
+    try {
+      const data = JSON.parse(message.body) as WSEvent
+      this.handleEvent(data)
+    } catch (e) {
+      console.error('[WebSocket] Failed to parse STOMP message:', e)
+    }
+  }
+
   disconnect() {
     this.reconnect = false
-    this.stopHeartbeat()
     this.clearAllHandlers()
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
+    if (this.client) {
+      try {
+        this.client.deactivate()
+      } catch (_) { /* ignore */ }
+      this.client = null
     }
     this.isConnected = false
-  }
-
-  private startHeartbeat() {
-    this.heartbeatTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.send({ type: 'ping' })
-      }
-    }, this.heartbeatInterval)
-  }
-
-  private stopHeartbeat() {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer)
-      this.heartbeatTimer = null
-    }
+    this.missionId = null
   }
 
   private handleEvent(event: WSEvent) {
+    // 后端 WSEvent 结构: { type, missionId, timestamp, payload }
     const handlers = this.eventHandlers.get(event.type)
     if (handlers) {
       handlers.forEach(handler => {
@@ -154,17 +204,21 @@ class WebSocketManager {
   }
 
   private flushMessageQueue() {
-    while (this.messageQueue.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
+    while (this.messageQueue.length > 0 && this.isConnected && this.client) {
       const message = this.messageQueue.shift()
       if (message) {
-        this.ws.send(JSON.stringify(message))
+        this.send(message)
       }
     }
   }
 
   send(data: WSEvent) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data))
+    if (this.isConnected && this.client) {
+      // 对齐后端 WebSocketController 的 @MessageMapping("/app/*")
+      this.client.publish({
+        destination: '/app/' + (data.type.startsWith('/') ? data.type.slice(1) : data.type),
+        body: JSON.stringify(data)
+      })
     } else {
       // 连接未建立时，将消息加入队列
       this.messageQueue.push(data)
@@ -183,7 +237,6 @@ class WebSocketManager {
     const handlers = this.eventHandlers.get(eventType)
     if (handlers) {
       handlers.delete(handler)
-      // 如果没有处理器了，删除这个事件类型
       if (handlers.size === 0) {
         this.eventHandlers.delete(eventType)
       }
@@ -243,7 +296,8 @@ class WebSocketManager {
       reconnectAttempts: this.reconnectAttempts,
       messageQueueLength: this.messageQueue.length,
       eventHandlersCount: this.eventHandlers.size,
-      connectionHandlersCount: this.connectionHandlers.size
+      connectionHandlersCount: this.connectionHandlers.size,
+      subscriptionsCount: this.subscriptions.length
     }
   }
 }

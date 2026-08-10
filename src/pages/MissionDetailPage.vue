@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NGrid, NGi, NCard, NButton, NSpace, NText, NIcon, NTooltip, NTabs, NTabPane, NSpin, NTag, useMessage } from 'naive-ui'
-import { PlayOutline, PauseOutline, RefreshOutline, DownloadOutline, TrashOutline } from '@vicons/ionicons5'
+import { PlayOutline, PauseOutline, RefreshOutline, DownloadOutline, TrashOutline, CloseOutline } from '@vicons/ionicons5'
 import CollaborationCanvas from '@/components/canvas/CollaborationCanvas.vue'
 import StructuredConsole from '@/components/common/StructuredConsole.vue'
 import AgentDetailModal from '@/components/common/AgentDetailModal.vue'
@@ -20,7 +20,7 @@ const isNewMission = computed(() => route.name === 'mission-new')
 // State
 const selectedNodeId = ref<string | null>(null)
 const showDetailModal = ref(false)
-const isRunning = computed(() => missionStore.currentMission?.status === 'running')
+const isRunning = computed(() => missionStore.currentMission?.status === 'running' || missionStore.currentMission?.status === 'paused')
 const isLoading = ref(false)
 
 // Current mission info
@@ -55,6 +55,32 @@ async function handlePause() {
     message.success('Mission paused')
   } catch (e) {
     message.error('Failed to pause mission')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleResume() {
+  if (!missionId.value) return
+  isLoading.value = true
+  try {
+    await missionStore.resumeMission(missionId.value)
+    message.success('Mission resumed')
+  } catch (e) {
+    message.error('Failed to resume mission')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleCancel() {
+  if (!missionId.value) return
+  isLoading.value = true
+  try {
+    await missionStore.cancelMission(missionId.value)
+    message.success('Mission cancelled')
+  } catch (e) {
+    message.error('Failed to cancel mission')
   } finally {
     isLoading.value = false
   }
@@ -134,14 +160,53 @@ const duration = computed(() => {
 onMounted(async () => {
   if (!isNewMission.value && missionId.value) {
     await missionStore.fetchMission(missionId.value)
-    wsManager.connect()
+    // 携带 missionId 连接，自动订阅 /topic/events 与 /topic/missions/{id}
+    wsManager.connect(missionId.value)
+
+    // 实时日志事件
     wsManager.on('log', (event: any) => {
+      const payload = event.payload || event.data || {}
       missionStore.addLog({
         id: `log-${Date.now()}`,
-        type: 'task',
+        type: (payload.type as any) || 'task',
         timestamp: event.timestamp || new Date().toISOString(),
-        message: String(event.payload?.message || '')
+        agentId: payload.agentId,
+        message: String(payload.message || '')
       })
+    })
+
+    // 节点状态更新事件 —— 驱动实时画布
+    wsManager.on('node_update', (event: any) => {
+      const payload = event.payload || event.data || {}
+      const nodeId = String(payload.nodeId || '')
+      const status = String((payload.data as any)?.status || payload.status || '')
+      if (!nodeId || !status) return
+      const node = missionStore.nodes.find(n => n.id === nodeId)
+      if (node) {
+        node.data.status = status as any
+        missionStore.currentMission!.updatedAt = event.timestamp || new Date().toISOString()
+      }
+    })
+
+    // 任务完成事件
+    wsManager.on('mission_completed', () => {
+      missionStore.fetchMission(missionId.value!)
+    })
+
+    // 任务失败事件
+    wsManager.on('mission_failed', () => {
+      missionStore.fetchMission(missionId.value!)
+    })
+
+    // Agent 状态更新事件
+    wsManager.on('agent_status_update', (event: any) => {
+      const payload = event.payload || event.data || {}
+      const agentId = String(payload.agentId || '')
+      const status = String(payload.status || '')
+      const node = missionStore.nodes.find(n => n.data.agent?.id === agentId)
+      if (node && status) {
+        node.data.status = status as any
+      }
     })
   }
 })
@@ -165,14 +230,26 @@ onUnmounted(() => {
       
       <NSpace>
         <NSpin :show="isLoading" size="small" />
-        <NButton v-if="!isRunning" type="primary" @click="handleStart" :disabled="isLoading">
+        <NButton v-if="missionStore.currentMission?.status === 'paused'" type="primary" @click="handleResume" :disabled="isLoading">
           <template #icon><NIcon><PlayOutline /></NIcon></template>
-          Start
+          Resume
         </NButton>
-        <NButton v-else @click="handlePause" :disabled="isLoading">
+        <NButton v-else-if="isRunning" @click="handlePause" :disabled="isLoading">
           <template #icon><NIcon><PauseOutline /></NIcon></template>
           Pause
         </NButton>
+        <NButton v-else type="primary" @click="handleStart" :disabled="isLoading">
+          <template #icon><NIcon><PlayOutline /></NIcon></template>
+          Start
+        </NButton>
+        <NTooltip v-if="isRunning">
+          <template #trigger>
+            <NButton type="error" ghost @click="handleCancel" :disabled="isLoading">
+              <template #icon><NIcon><CloseOutline /></NIcon></template>
+            </NButton>
+          </template>
+          Cancel Mission
+        </NTooltip>
         <NTooltip>
           <template #trigger>
             <NButton @click="handleRetry" :disabled="isLoading">
