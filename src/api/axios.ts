@@ -180,8 +180,6 @@ export const missionApi = {
 
   resume: (id: string) => api.post(`/missions/${id}/resume`),
 
-  run: (id: string) => api.post(`/missions/${id}/run`, {}, { retryable: true }),
-
   cancel: (id: string) => api.post(`/missions/${id}/cancel`),
 
   runtime: (id: string) => api.get(`/missions/${id}/runtime`),
@@ -215,6 +213,10 @@ export const agentApi = {
 
   evolutionHistory: (id: string) => api.get(`/agents/${id}/evolution/history`),
 
+  metrics: (id: string) => api.get(`/agents/${id}/metrics`),
+
+  rate: (id: string, rating: number) => api.post(`/agents/${id}/rate`, { rating }),
+
   rollback: (agentId: string, recordId: number) =>
     api.post(`/agents/${agentId}/evolution/${recordId}/rollback`),
 
@@ -236,6 +238,13 @@ export const templateApi = {
   delete: (id: string) => api.delete(`/templates/${id}`),
 
   clone: (id: string) => api.post<{ id: string }>(`/templates/${id}/clone`)
+}
+
+// ==================== Auth API ====================
+export const authApi = {
+  login: (data: { username: string; password: string }) => api.post('/auth/login', data, { retryable: false }),
+
+  me: () => api.get('/auth/me', { retryable: false })
 }
 
 export { AppError, classifyError, retryWithBackoff, executeErrorRecovery } from '@/utils/errorHandler'

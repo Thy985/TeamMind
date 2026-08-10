@@ -212,21 +212,6 @@ export const useMissionStore = defineStore('mission', () => {
   }
 
   /**
-   * 运行任务
-   */
-  async function runMission(id: string) {
-    try {
-      const response = await missionApi.run(id)
-      if (response.success) {
-        await fetchMission(id)
-      }
-    } catch (error) {
-      console.error('Failed to run mission:', error)
-      throw error
-    }
-  }
-
-  /**
    * 取消任务
    */
   async function cancelMission(id: string) {
@@ -330,7 +315,6 @@ export const useMissionStore = defineStore('mission', () => {
     startMission,
     pauseMission,
     resumeMission,
-    runMission,
     cancelMission,
     retryNode,
     skipNode,

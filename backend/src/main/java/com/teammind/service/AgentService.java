@@ -41,6 +41,7 @@ public class AgentService {
     private final WSEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final SQLiteWriteLockService writeLockService;
+    private final AgentMetricsService agentMetricsService;
 
     @Value("${teammind.agents-path:${user.home}/.teammind/agents}")
     private String agentsPath;
@@ -264,6 +265,22 @@ public class AgentService {
     }
 
     /**
+     * 用户评分（真实进化评估闭环）
+     */
+    @Transactional
+    public AgentDTO rateAgent(String agentId, double rating) {
+        Agent agent = agentMetricsService.rateAgent(agentId, rating);
+        return toDTO(agent);
+    }
+
+    /**
+     * 获取 Agent 真实执行指标（真实进化评估闭环）
+     */
+    public Map<String, Object> getAgentMetrics(String agentId) {
+        return agentMetricsService.getAgentMetrics(agentId);
+    }
+
+    /**
      * 加载 Agent 配置文件
      */
     private void loadAgentConfig(Agent agent) {
@@ -379,6 +396,11 @@ public class AgentService {
                 .currentPrompt(agent.getCurrentPrompt())
                 .evolutionVersion(agent.getEvolutionVersion())
                 .evolutionScore(agent.getEvolutionScore())
+                .totalMissions(agent.getTotalMissions())
+                .successfulMissions(agent.getSuccessfulMissions())
+                .totalTokensUsed(agent.getTotalTokensUsed())
+                .userRating(agent.getUserRating())
+                .ratingCount(agent.getRatingCount())
                 .installed(agent.getInstalled())
                 .enabled(agent.getEnabled())
                 .installedAt(formatDateTime(agent.getInstalledAt()))

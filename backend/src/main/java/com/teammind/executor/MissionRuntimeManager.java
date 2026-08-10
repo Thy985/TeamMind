@@ -7,6 +7,7 @@ import com.teammind.entity.Mission;
 import com.teammind.llm.LLMTrackingService;
 import com.teammind.repository.AgentRepository;
 import com.teammind.repository.MissionRepository;
+import com.teammind.service.AgentMetricsService;
 import com.teammind.websocket.WSEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -33,6 +34,7 @@ public class MissionRuntimeManager {
     private final WSEventPublisher eventPublisher;
     private final ExecutorService executorService;
     private final SQLiteWriteLockService writeLockService;
+    private final AgentMetricsService agentMetricsService;
 
     // 运行中的任务
     private final Map<String, MissionRuntime> activeMissions = new ConcurrentHashMap<>();
@@ -47,7 +49,8 @@ public class MissionRuntimeManager {
             LLMTrackingService trackingService,
             WSEventPublisher eventPublisher,
             @Qualifier("missionExecutorService") ExecutorService executorService,
-            SQLiteWriteLockService writeLockService) {
+            SQLiteWriteLockService writeLockService,
+            AgentMetricsService agentMetricsService) {
         this.missionRepository = missionRepository;
         this.agentRepository = agentRepository;
         this.executionEngine = executionEngine;
@@ -55,6 +58,7 @@ public class MissionRuntimeManager {
         this.eventPublisher = eventPublisher;
         this.executorService = executorService;
         this.writeLockService = writeLockService;
+        this.agentMetricsService = agentMetricsService;
     }
 
     /**
@@ -115,6 +119,9 @@ public class MissionRuntimeManager {
             // 发布完成事件
             eventPublisher.publishMissionCompleted(missionId, result);
 
+            // ✅ 真实进化评估闭环：回写各 Agent 的真实执行指标（成功）
+            recordAgentMetrics(runtime, true);
+
             log.info("Mission completed: {}", missionId);
 
         } catch (Exception e) {
@@ -131,6 +138,9 @@ public class MissionRuntimeManager {
 
             // ✅ 发布任务失败事件
             eventPublisher.publishMissionFailed(missionId, e.getMessage());
+
+            // ✅ 真实进化评估闭环：回写各 Agent 的真实执行指标（失败）
+            recordAgentMetrics(runtime, false);
 
         } finally {
             activeMissions.remove(missionId);
@@ -883,6 +893,33 @@ public class MissionRuntimeManager {
         result.put("agentOutputs", outputs);
 
         return result;
+    }
+
+    /**
+     * ✅ 真实进化评估闭环：任务结束后回写各 Agent 的真实执行指标
+     *
+     * 汇总任务中各 Agent 的执行结果（成功/失败、Token 消耗），
+     * 写入 Agent 的累计指标，供后续进化评估使用。
+     *
+     * @param runtime  任务运行时
+     * @param missionSuccess 整个任务是否成功
+     */
+    private void recordAgentMetrics(MissionRuntime runtime, boolean missionSuccess) {
+        Map<String, AgentExecutionResult> agentResults = runtime.getResults();
+        if (agentResults == null || agentResults.isEmpty()) {
+            return;
+        }
+
+        agentResults.forEach((agentId, execResult) -> {
+            if (agentId == null) {
+                return;
+            }
+            boolean success = execResult != null && execResult.isSuccess() && missionSuccess;
+            long tokens = execResult != null && execResult.getTokenUsage() != null
+                    ? execResult.getTokenUsage().getTotalTokens()
+                    : 0L;
+            agentMetricsService.recordTaskResult(agentId, success, tokens);
+        });
     }
 
     /**

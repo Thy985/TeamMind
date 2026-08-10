@@ -100,6 +100,11 @@ teammind:
       base-url: ${LOCAL_LLM_URL:http://localhost:11434}
       model: ${LOCAL_LLM_MODEL:llama2}
   
+  # 安全/JWT 认证配置
+  security:
+    jwt-secret: ${TEAMMIND_JWT_SECRET:teammind-dev-secret-change-in-production}
+    jwt-expiration-seconds: 86400
+
   # 进化配置
   evolution:
     enabled: true

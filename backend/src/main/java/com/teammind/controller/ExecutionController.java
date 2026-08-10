@@ -84,36 +84,6 @@ public class ExecutionController {
     }
 
     /**
-     * 启动任务（异步）
-     */
-    @PostMapping("/missions/{id}/run")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> runMission(@PathVariable String id) {
-        runtimeManager.startMission(id);
-        return ResponseEntity.ok(ApiResponse.success(
-                Map.of("missionId", id, "status", "started"),
-                "Mission execution started"
-        ));
-    }
-
-    /**
-     * 暂停任务
-     */
-    @PostMapping("/missions/{id}/pause-execution")
-    public ResponseEntity<ApiResponse<Void>> pauseMissionExecution(@PathVariable String id) {
-        runtimeManager.pauseMission(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "Mission paused"));
-    }
-
-    /**
-     * 恢复任务
-     */
-    @PostMapping("/missions/{id}/resume-execution")
-    public ResponseEntity<ApiResponse<Void>> resumeMissionExecution(@PathVariable String id) {
-        runtimeManager.resumeMission(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "Mission resumed"));
-    }
-
-    /**
      * 获取任务运行状态
      */
     @GetMapping("/missions/{id}/runtime")

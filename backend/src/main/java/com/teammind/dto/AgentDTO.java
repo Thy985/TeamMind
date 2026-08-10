@@ -30,6 +30,11 @@ public class AgentDTO {
     private String currentPrompt;
     private Integer evolutionVersion;
     private Double evolutionScore;
+    private Long totalMissions;
+    private Long successfulMissions;
+    private Long totalTokensUsed;
+    private Double userRating;
+    private Long ratingCount;
     private Boolean installed;
     private Boolean enabled;
     private String installedAt;

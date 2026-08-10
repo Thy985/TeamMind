@@ -55,9 +55,6 @@ public class AgentExecutionEngine {
         this.writeLockService = writeLockService;
     }
 
-    // 工具注册表
-    private final Map<String, ToolExecutor> toolRegistry = new ConcurrentHashMap<>();
-
     /**
      * 执行 Agent 任务
      */
@@ -342,6 +339,20 @@ public class AgentExecutionEngine {
                 .build();
 
         try {
+            // ✅ 权限控制：Agent 必须拥有执行该工具所需的权限
+            Agent agent = agentRepository.findById(context.getAgentId()).orElse(null);
+            String requiredPermission = requiredPermissionForTool(request.name);
+            if (agent != null && requiredPermission != null
+                    && (agent.getPermissions() == null || !agent.getPermissions().contains(requiredPermission))) {
+                String msg = "Permission denied: agent lacks permission '" + requiredPermission
+                        + "' to execute tool '" + request.name + "'";
+                log.warn("{}, agent={}", msg, agent.getId());
+                toolCall.setSuccess(false);
+                toolCall.setError(msg);
+                toolCall.setResult(Map.of("error", msg, "permission", requiredPermission));
+                return toolCall;
+            }
+
             // ✅ 修复：实现真实工具而非模拟
             Object result = executeRealTool(request.name, request.arguments);
             toolCall.setResult(result);
@@ -355,6 +366,24 @@ public class AgentExecutionEngine {
         }
 
         return toolCall;
+    }
+
+    /**
+     * ✅ Agent 权限控制：返回执行工具所需的最小权限
+     */
+    private String requiredPermissionForTool(String toolName) {
+        switch (toolName.toLowerCase()) {
+            case "code_analyzer":
+                return "read:code";
+            case "file_reader":
+                return "read:files";
+            case "web_search":
+                return "read:web";
+            case "text_processor":
+                return "write:text";
+            default:
+                return null; // 未知工具不做强制权限限制
+        }
     }
 
     /**
@@ -618,12 +647,4 @@ public class AgentExecutionEngine {
      * 工具调用请求
      */
     private record ToolCallRequest(String name, Map<String, Object> arguments) {}
-
-    /**
-     * 工具执行器接口
-     */
-    @FunctionalInterface
-    public interface ToolExecutor {
-        Object execute(Map<String, Object> arguments, AgentExecutionContext context);
-    }
 }

@@ -1,5 +1,6 @@
 import { useRouter, useRoute } from 'vue-router'
 import { ref, computed } from 'vue'
+import { authApi } from '@/api/axios'
 
 /**
  * 用户认证和权限管理
@@ -50,12 +51,23 @@ export function useAuth() {
    * 登录
    */
   async function login(email: string, password: string) {
-    // 这里应该调用实际的登录 API
-    // const response = await authApi.login(email, password)
-    // token.value = response.token
-    // user.value = response.user
-    // localStorage.setItem('token', token.value)
-    // localStorage.setItem('user', JSON.stringify(user.value))
+    // 调用后端登录 API，获取 JWT
+    const response = await authApi.login({ username: email, password })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || 'Login failed')
+    }
+    const data = response.data as any
+    token.value = data.token || ''
+    user.value = {
+      id: data.userId,
+      name: data.username,
+      email: data.email || '',
+      roles: data.roles || [],
+      permissions: data.permissions || []
+    }
+    localStorage.setItem('token', token.value || '')
+    localStorage.setItem('user', JSON.stringify(user.value))
+    return data
   }
 
   /**
