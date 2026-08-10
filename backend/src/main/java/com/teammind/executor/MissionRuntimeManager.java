@@ -1,14 +1,15 @@
 package com.teammind.executor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.teammind.config.SQLiteWriteLockService;
 import com.teammind.entity.Agent;
 import com.teammind.entity.Mission;
 import com.teammind.llm.LLMTrackingService;
 import com.teammind.repository.AgentRepository;
 import com.teammind.repository.MissionRepository;
 import com.teammind.websocket.WSEventPublisher;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +24,6 @@ import java.util.concurrent.*;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MissionRuntimeManager {
 
     private final MissionRepository missionRepository;
@@ -31,30 +31,31 @@ public class MissionRuntimeManager {
     private final AgentExecutionEngine executionEngine;
     private final LLMTrackingService trackingService;
     private final WSEventPublisher eventPublisher;
+    private final ExecutorService executorService;
+    private final SQLiteWriteLockService writeLockService;
 
     // 运行中的任务
     private final Map<String, MissionRuntime> activeMissions = new ConcurrentHashMap<>();
     
-    // ✅ 修复：使用有界线程池而非无限制的 CachedThreadPool
-    private final ExecutorService executorService = new ThreadPoolExecutor(
-        Math.max(4, Runtime.getRuntime().availableProcessors()),  // corePoolSize
-        Math.max(8, Runtime.getRuntime().availableProcessors() * 2),  // maxPoolSize
-        60,                                                         // keepAliveTime
-        TimeUnit.SECONDS,
-        new LinkedBlockingQueue<>(100),                            // 有界队列，防止 OOM
-        new ThreadFactory() {
-            private final java.util.concurrent.atomic.AtomicInteger count = 
-                new java.util.concurrent.atomic.AtomicInteger(0);
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("mission-executor-" + count.incrementAndGet());
-                t.setDaemon(false);
-                return t;
-            }
-        },
-        new ThreadPoolExecutor.CallerRunsPolicy()  // 拒绝策略：调用者线程执行
-    );
+    /**
+     * 构造函数 - 注入统一的有界线程池（与 ThreadPoolConfig 中一致）
+     */
+    public MissionRuntimeManager(
+            MissionRepository missionRepository,
+            AgentRepository agentRepository,
+            AgentExecutionEngine executionEngine,
+            LLMTrackingService trackingService,
+            WSEventPublisher eventPublisher,
+            @Qualifier("missionExecutorService") ExecutorService executorService,
+            SQLiteWriteLockService writeLockService) {
+        this.missionRepository = missionRepository;
+        this.agentRepository = agentRepository;
+        this.executionEngine = executionEngine;
+        this.trackingService = trackingService;
+        this.eventPublisher = eventPublisher;
+        this.executorService = executorService;
+        this.writeLockService = writeLockService;
+    }
 
     /**
      * 启动任务
@@ -66,10 +67,12 @@ public class MissionRuntimeManager {
         Mission mission = missionRepository.findById(missionId)
                 .orElseThrow(() -> new RuntimeException("Mission not found: " + missionId));
 
-        // 更新状态
-        mission.setStatus(Mission.MissionStatus.RUNNING);
-        mission.setUpdatedAt(LocalDateTime.now());
-        missionRepository.save(mission);
+        // 更新状态（SQLite 写串行化）
+        writeLockService.executeWithLock(() -> {
+            mission.setStatus(Mission.MissionStatus.RUNNING);
+            mission.setUpdatedAt(LocalDateTime.now());
+            missionRepository.save(mission);
+        });
 
         // 创建运行时
         MissionRuntime runtime = new MissionRuntime(mission);
@@ -85,24 +88,29 @@ public class MissionRuntimeManager {
             // ✅ 检查是否被取消
             if (runtime.isCancelled()) {
                 log.info("Mission was cancelled: {}", missionId);
-                mission.setStatus(Mission.MissionStatus.FAILED);
-                mission.setUpdatedAt(LocalDateTime.now());
-                missionRepository.save(mission);
+                writeLockService.executeWithLock(() -> {
+                    mission.setStatus(Mission.MissionStatus.FAILED);
+                    mission.setUpdatedAt(LocalDateTime.now());
+                    missionRepository.save(mission);
+                });
                 addLog(mission, "warning", null, "Mission was cancelled by user");
                 eventPublisher.publishMissionFailed(missionId);
                 return;
             }
 
             // 标记完成
-            mission.setStatus(Mission.MissionStatus.COMPLETED);
-            mission.setCompletedAt(LocalDateTime.now());
-            mission.setUpdatedAt(LocalDateTime.now());
+            Map<String, Object> result = writeLockService.executeWithLock(() -> {
+                mission.setStatus(Mission.MissionStatus.COMPLETED);
+                mission.setCompletedAt(LocalDateTime.now());
+                mission.setUpdatedAt(LocalDateTime.now());
 
-            // 设置结果
-            Map<String, Object> result = buildMissionResult(runtime);
-            mission.setResult(result);
+                // 设置结果
+                Map<String, Object> missionResult = buildMissionResult(runtime);
+                mission.setResult(missionResult);
 
-            missionRepository.save(mission);
+                missionRepository.save(mission);
+                return missionResult;
+            });
 
             // 发布完成事件
             eventPublisher.publishMissionCompleted(missionId, result);
@@ -112,9 +120,11 @@ public class MissionRuntimeManager {
         } catch (Exception e) {
             log.error("Mission failed: {}", missionId, e);
 
-            mission.setStatus(Mission.MissionStatus.FAILED);
-            mission.setUpdatedAt(LocalDateTime.now());
-            missionRepository.save(mission);
+            writeLockService.executeWithLock(() -> {
+                mission.setStatus(Mission.MissionStatus.FAILED);
+                mission.setUpdatedAt(LocalDateTime.now());
+                missionRepository.save(mission);
+            });
 
             // 添加错误日志
             addLog(mission, "error", null, "Mission failed: " + e.getMessage());
@@ -771,48 +781,52 @@ public class MissionRuntimeManager {
     }
 
     /**
-     * 更新节点状态
+     * 更新节点状态（SQLite 写串行化）
      */
     private void updateNodeStatus(Mission mission, String nodeId, String status) {
-        List<Map<String, Object>> nodes = mission.getNodes();
-        if (nodes == null) return;
+        writeLockService.executeWithLock(() -> {
+            List<Map<String, Object>> nodes = mission.getNodes();
+            if (nodes == null) return;
 
-        for (Map<String, Object> node : nodes) {
-            if (nodeId.equals(node.get("id"))) {
-                Map<String, Object> data = (Map<String, Object>) node.get("data");
-                if (data == null) {
-                    data = new HashMap<>();
-                    node.put("data", data);
+            for (Map<String, Object> node : nodes) {
+                if (nodeId.equals(node.get("id"))) {
+                    Map<String, Object> data = (Map<String, Object>) node.get("data");
+                    if (data == null) {
+                        data = new HashMap<>();
+                        node.put("data", data);
+                    }
+                    data.put("status", status);
+                    break;
                 }
-                data.put("status", status);
-                break;
             }
-        }
 
-        mission.setNodes(nodes);
-        mission.setUpdatedAt(LocalDateTime.now());
+            mission.setNodes(nodes);
+            mission.setUpdatedAt(LocalDateTime.now());
+        });
     }
 
     /**
-     * 更新节点输出
+     * 更新节点输出（SQLite 写串行化）
      */
     private void updateNodeOutput(Mission mission, String nodeId, Map<String, Object> output) {
-        List<Map<String, Object>> nodes = mission.getNodes();
-        if (nodes == null) return;
+        writeLockService.executeWithLock(() -> {
+            List<Map<String, Object>> nodes = mission.getNodes();
+            if (nodes == null) return;
 
-        for (Map<String, Object> node : nodes) {
-            if (nodeId.equals(node.get("id"))) {
-                Map<String, Object> data = (Map<String, Object>) node.get("data");
-                if (data == null) {
-                    data = new HashMap<>();
-                    node.put("data", data);
+            for (Map<String, Object> node : nodes) {
+                if (nodeId.equals(node.get("id"))) {
+                    Map<String, Object> data = (Map<String, Object>) node.get("data");
+                    if (data == null) {
+                        data = new HashMap<>();
+                        node.put("data", data);
+                    }
+                    data.put("output", output);
+                    break;
                 }
-                data.put("output", output);
-                break;
             }
-        }
 
-        mission.setNodes(nodes);
+            mission.setNodes(nodes);
+        });
     }
 
     /**
@@ -823,25 +837,27 @@ public class MissionRuntimeManager {
     }
 
     /**
-     * 添加日志
+     * 添加日志（SQLite 写串行化）
      */
     private void addLog(Mission mission, String type, String agentId, String message) {
-        List<Map<String, Object>> logs = mission.getLogs();
-        if (logs == null) {
-            logs = new ArrayList<>();
-        }
+        writeLockService.executeWithLock(() -> {
+            List<Map<String, Object>> logs = mission.getLogs();
+            if (logs == null) {
+                logs = new ArrayList<>();
+            }
 
-        Map<String, Object> log = new HashMap<>();
-        log.put("id", UUID.randomUUID().toString());
-        log.put("type", type);
-        log.put("timestamp", LocalDateTime.now().toString());
-        log.put("agentId", agentId);
-        log.put("message", message);
-        logs.add(log);
+            Map<String, Object> log = new HashMap<>();
+            log.put("id", UUID.randomUUID().toString());
+            log.put("type", type);
+            log.put("timestamp", LocalDateTime.now().toString());
+            log.put("agentId", agentId);
+            log.put("message", message);
+            logs.add(log);
 
-        mission.setLogs(logs);
+            mission.setLogs(logs);
+        });
 
-        // 发布日志事件
+        // 发布日志事件（不在锁内）
         eventPublisher.publishLog(mission.getId(), type, agentId, message);
     }
 

@@ -21,10 +21,10 @@ public class LLMService {
 
     private final List<LLMClient> clients;
     
-    @Value("${teammind.llm.default-provider:openai}")
+    @Value("${teammind.llm.default-provider:qianfan}")
     private String defaultProvider;
     
-    @Value("${teammind.llm.default-model:gpt-4-turbo-preview}")
+    @Value("${teammind.llm.default-model:deepseek-v3.2}")
     private String defaultModel;
 
     /**

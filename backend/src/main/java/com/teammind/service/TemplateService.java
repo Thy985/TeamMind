@@ -1,5 +1,6 @@
 package com.teammind.service;
 
+import com.teammind.config.SQLiteWriteLockService;
 import com.teammind.dto.*;
 import com.teammind.entity.TeamTemplate;
 import com.teammind.repository.TeamTemplateRepository;
@@ -28,8 +29,9 @@ import java.util.*;
 public class TemplateService {
 
     private final TeamTemplateRepository templateRepository;
+    private final SQLiteWriteLockService writeLockService;
 
-    @Value("${teammind.templates-path:~/.teammind/templates}")
+    @Value("${teammind.templates-path:${user.home}/.teammind/templates}")
     private String templatesPath;
 
     /**
@@ -98,7 +100,8 @@ public class TemplateService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        template = templateRepository.save(template);
+        TeamTemplate finalTemplate = template;
+        template = writeLockService.executeWithLock(() -> templateRepository.save(finalTemplate));
 
         // 保存到 Markdown 文件
         saveTemplateConfig(template);
@@ -134,7 +137,8 @@ public class TemplateService {
         }
         template.setUpdatedAt(LocalDateTime.now());
 
-        template = templateRepository.save(template);
+        TeamTemplate finalTemplate = template;
+        template = writeLockService.executeWithLock(() -> templateRepository.save(finalTemplate));
 
         // 更新 Markdown 文件
         saveTemplateConfig(template);
@@ -160,7 +164,7 @@ public class TemplateService {
             }
         }
 
-        templateRepository.deleteById(id);
+        writeLockService.executeWithLock(() -> templateRepository.deleteById(id));
     }
 
     /**
@@ -172,7 +176,8 @@ public class TemplateService {
                 .orElseThrow(() -> new RuntimeException("Template not found: " + id));
 
         template.setUsageCount(template.getUsageCount() + 1);
-        template = templateRepository.save(template);
+        TeamTemplate finalTemplate = template;
+        template = writeLockService.executeWithLock(() -> templateRepository.save(finalTemplate));
 
         return toDTO(template);
     }
@@ -208,7 +213,8 @@ public class TemplateService {
 
             Files.writeString(configPath, md.toString());
             template.setConfigPath(filename);
-            templateRepository.save(template);
+            TeamTemplate finalTemplate = template;
+            writeLockService.executeWithLock(() -> templateRepository.save(finalTemplate));
 
             log.info("Saved template config: {} to {}", template.getId(), configPath);
 
