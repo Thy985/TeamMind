@@ -27,10 +27,10 @@
   name: install
   script: npm ci --frozen-lockfile
 
-# 后端依赖编译
+# 后端依赖编译（pom.xml 位于 backend/ 子目录，需先进入）
 .backend-install: &backend-install
   name: compile
-  script: mvn -B -q compile
+  script: cd backend && mvn -B -q compile
 
 # === 触发规则 ===
 
@@ -42,7 +42,7 @@ main:
       stages:
         - *frontend-install
         - name: lint
-          script: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+          script: npx eslint .
         - name: test
           script: npm run test:coverage
         - name: build
@@ -52,9 +52,9 @@ main:
       stages:
         - *backend-install
         - name: package
-          script: mvn -B package
+          script: cd backend && mvn -B package
         - name: test
-          script: mvn -B test
+          script: cd backend && mvn -B test
 
 # 任意分支 PR：做基础质量检查（lint + 测试 + 构建）
 "feature/*":
@@ -64,7 +64,7 @@ main:
       stages:
         - *frontend-install
         - name: lint
-          script: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+          script: npx eslint .
         - name: test
           script: npm run test:coverage
         - name: build
@@ -74,9 +74,9 @@ main:
       stages:
         - *backend-install
         - name: package
-          script: mvn -B package
+          script: cd backend && mvn -B package
         - name: test
-          script: mvn -B test
+          script: cd backend && mvn -B test
 
 # 兜底分支（其他任意分支 push 也跑基础检查）
 $:
@@ -86,7 +86,7 @@ $:
       stages:
         - *frontend-install
         - name: lint
-          script: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+          script: npx eslint .
         - name: test
           script: npm run test:coverage
         - name: build
@@ -96,6 +96,6 @@ $:
       stages:
         - *backend-install
         - name: package
-          script: mvn -B package
+          script: cd backend && mvn -B package
         - name: test
-          script: mvn -B test
+          script: cd backend && mvn -B test
