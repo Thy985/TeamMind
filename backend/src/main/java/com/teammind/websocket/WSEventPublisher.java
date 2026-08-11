@@ -120,6 +120,28 @@ public class WSEventPublisher {
     }
 
     /**
+     * 发布决议投票更新事件
+     */
+    public void publishResolutionVote(String missionId, String resolutionId, String agentId, String optionId) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("resolutionId", resolutionId);
+        payload.put("agentId", agentId);
+        payload.put("optionId", optionId);
+        publish(WSEvent.of(WSEvent.RESOLUTION_REQUIRED, missionId, payload));
+    }
+
+    /**
+     * 发布决议已解决事件
+     */
+    public void publishResolutionResolved(String missionId, String resolutionId, String optionId, Map<String, Object> votes) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("resolutionId", resolutionId);
+        payload.put("optionId", optionId);
+        payload.put("votes", votes);
+        publish(WSEvent.of(WSEvent.RESOLUTION_RESOLVED, missionId, payload));
+    }
+
+    /**
      * 发布事件到所有订阅者
      */
     private void publish(WSEvent event) {

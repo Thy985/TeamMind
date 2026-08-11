@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Mission, MissionNode, MissionEdge, LogEntry, MissionStatus } from '@/types'
+import type { Mission, MissionNode, MissionEdge, LogEntry, MissionStatus, AgentStatus } from '@/types'
 import { missionApi } from '@/api/axios'
 import { useAsyncOperation, usePaginatedAsyncOperation } from '@/composables/useAsyncOperation'
 import { validatePaginatedResponse, MissionSchema } from '@/utils/validation'
@@ -277,6 +277,19 @@ export const useMissionStore = defineStore('mission', () => {
   }
 
   /**
+   * 更新指定节点的状态（供 WebSocket 实时事件驱动）
+   */
+  function updateNodeStatus(nodeId: string, status: AgentStatus, extraData?: Record<string, unknown>) {
+    const node = nodes.value.find(n => n.id === nodeId)
+    if (node) {
+      node.data.status = status
+      if (extraData) {
+        node.data.output = { ...(node.data.output || {}), ...extraData }
+      }
+    }
+  }
+
+  /**
    * 添加日志
    */
   function addLog(log: LogEntry) {
@@ -320,6 +333,7 @@ export const useMissionStore = defineStore('mission', () => {
     skipNode,
     setMission,
     clearCurrentMission,
+    updateNodeStatus,
     addLog,
     clearLogs
   }

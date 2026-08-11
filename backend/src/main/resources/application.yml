@@ -102,7 +102,9 @@ teammind:
   
   # 安全/JWT 认证配置
   security:
-    jwt-secret: ${TEAMMIND_JWT_SECRET:teammind-dev-secret-change-in-production}
+    # 必须通过环境变量 TEAMMIND_JWT_SECRET 注入强随机密钥（>=32字符）。
+    # 未设置或使用默认占位密钥时，应用将拒绝启动（fail-closed）。
+    jwt-secret: ${TEAMMIND_JWT_SECRET:}
     jwt-expiration-seconds: 86400
 
   # 工具执行配置
@@ -117,7 +119,22 @@ teammind:
     enabled: true
     auto-save: true
     max-history-versions: 50
-    
+
+    # 进化门禁决策（准入控制）
+    gate:
+      enabled: true
+      min-missions: 5
+      cooldown-minutes: 30
+      high-success-threshold: 0.9
+
+    # 自动进化调度（基于真实指标阈值触发）
+    auto-scheduler:
+      enabled: false
+      interval-ms: 3600000
+      low-success-threshold: 0.6
+      high-token-per-task: 8000
+      low-rating-threshold: 3.0
+
     # Prompt 优化配置
     prompt-optimization:
       enabled: true

@@ -21,6 +21,9 @@
     image: maven:3.9-eclipse-temurin-17
     volumes:
       - backend_m2_repo
+  env:
+    # JWT 密钥（>=32字符），供后端启动/测试使用；生产须自行注入
+    TEAMMIND_JWT_SECRET: ${TEAMMIND_JWT_SECRET:-teammind-ci-build-only-secret-0123456789abcdef}
 
 # 前端依赖安装
 .frontend-install: &frontend-install
