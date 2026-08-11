@@ -31,6 +31,8 @@
     "@testing-library/vue": "^8.0.0",
     "@types/node": "^24.12.0",
     "@types/sockjs-client": "^1.5.4",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vitest/ui": "^1.0.0",
     "@vue/test-utils": "^2.4.0",

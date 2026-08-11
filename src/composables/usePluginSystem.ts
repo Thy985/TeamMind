@@ -418,12 +418,14 @@ export function usePluginSystem() {
  * 插件 Hooks 管理器
  */
 export function usePluginHooks() {
-  const hooks = ref<Map<string, Function>>(new Map())
+  // 钩子回调：接受任意参数，可能同步返回或返回 Promise
+  type HookCallback = (...args: any[]) => any
+  const hooks = ref<Map<string, HookCallback>>(new Map())
 
   /**
    * 注册钩子
    */
-  function registerHook(name: string, callback: Function) {
+  function registerHook(name: string, callback: HookCallback) {
     hooks.value.set(name, callback)
   }
 
