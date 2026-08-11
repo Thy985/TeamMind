@@ -46,5 +46,15 @@ module.exports = {
         extraFileExtensions: ['.vue'],
       },
     },
+    {
+      files: ['*.ts', '*.tsx'],
+      parser: '@typescript-eslint/parser',
+      extends: ['plugin:@typescript-eslint/recommended'],
+      rules: {
+        // 允许在脚本中使用 any 等宽松写法，避免过度约束
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      },
+    },
   ],
 };
