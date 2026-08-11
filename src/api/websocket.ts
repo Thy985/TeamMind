@@ -81,6 +81,10 @@ class WebSocketManager {
           reconnectDelay: this.reconnect ? this.reconnectInterval : 0,
           heartbeatIncoming: this.heartbeatInterval,
           heartbeatOutgoing: this.heartbeatInterval,
+          connectHeaders: {
+            // 携带 JWT，供后端 WebSocket 鉴权
+            Authorization: localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : ''
+          },
           debug: (str) => {
             if (import.meta.env.DEV) {
               console.debug('[STOMP]', str)

@@ -6,6 +6,7 @@ import com.teammind.entity.User;
 import com.teammind.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
      * 登录：校验用户名密码，签发 JWT
@@ -35,8 +37,23 @@ public class AuthService {
             throw new RuntimeException("User is disabled");
         }
 
-        // 演示环境明文比对；生产环境应使用 BCrypt.matches
-        if (!user.getPassword().equals(password)) {
+        // 使用 BCrypt 安全比对密码（不再明文存储/比对）
+        // 兼容历史：若旧库中仍为明文密码，则先明文校验并升级为 BCrypt 哈希。
+        boolean isHashed = user.getPassword() != null && user.getPassword().startsWith("$2");
+        boolean matches;
+        if (isHashed) {
+            matches = passwordEncoder.matches(password, user.getPassword());
+        } else {
+            // 历史明文：仅在演示环境兼容，登录成功后立即升级为 BCrypt 哈希
+            matches = user.getPassword() != null && user.getPassword().equals(password);
+            if (matches) {
+                log.warn("User '{}' used a legacy plaintext password; upgrading to BCrypt hash.", username);
+                user.setPassword(passwordEncoder.encode(password));
+                userRepository.save(user);
+            }
+        }
+
+        if (!matches) {
             throw new RuntimeException("Invalid username or password");
         }
 
