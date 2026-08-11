@@ -15,6 +15,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -291,5 +293,128 @@ class AgentExecutionEngineTest {
         assertTrue(result.getError().contains("LLM call failed"));
         // 3 次重试机会全部耗尽
         verify(llmService, times(3)).chat(any(LLMRequest.class));
+    }
+
+    // ==================== 真实工具执行（消灭空壳） ====================
+
+    @Test
+    @DisplayName("真实工具：readFile 读取沙箱内的真实文件内容")
+    void realTool_readFile_readsActualContent() throws Exception {
+        // 在沙箱根目录下创建临时文件
+        Path sandbox = Files.createTempDirectory("teammind-sandbox");
+        Path realFile = sandbox.resolve("notes.txt");
+        Files.writeString(realFile, "hello real world");
+
+        // 通过反射注入 dataPath（@Value 字段在单元测试中不会被注入）
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "dataPath", sandbox.toString());
+        // file_reader 需要 read:files 权限
+        agent.setPermissions(List.of("read:code", "write:text", "read:files"));
+        when(agentRepository.findById(anyString())).thenReturn(Optional.of(agent));
+
+        when(llmService.chat(any(LLMRequest.class)))
+                .thenReturn(successResponse(
+                        "```json\n{\"tool\": \"file_reader\", \"arguments\": {\"path\": \"" + realFile + "\"}}\n```",
+                        20, 10))
+                .thenReturn(successResponse("Done reading.", 5, 3));
+
+        AgentExecutionResult result = executeSync(buildContext());
+
+        assertNotNull(result);
+        assertTrue(result.isSuccess());
+        assertFalse(result.getToolCalls().isEmpty());
+        AgentExecutionContext.ToolCall call = result.getToolCalls().get(0);
+        assertTrue(call.isSuccess(), "readFile should succeed");
+        Map<?, ?> toolResult = (Map<?, ?>) call.getResult();
+        // 真实内容被读取，而非硬编码假数据
+        assertEquals("hello real world", toolResult.get("content"));
+    }
+
+    @Test
+    @DisplayName("真实工具：readFile 阻断路径穿越逃逸沙箱")
+    void realTool_readFile_blocksPathTraversal() throws Exception {
+        Path sandbox = Files.createTempDirectory("teammind-sandbox");
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "dataPath", sandbox.toString());
+        // file_reader 需要 read:files 权限
+        agent.setPermissions(List.of("read:code", "write:text", "read:files"));
+        when(agentRepository.findById(anyString())).thenReturn(Optional.of(agent));
+
+        // 绝对路径指向沙箱之外的目录
+        String outside = Files.createTempDirectory("outside-sandbox").resolve("secret.txt").toString();
+
+        when(llmService.chat(any(LLMRequest.class)))
+                .thenReturn(successResponse(
+                        "```json\n{\"tool\": \"file_reader\", \"arguments\": {\"path\": \"" + outside + "\"}}\n```",
+                        20, 10))
+                .thenReturn(successResponse("Done.", 5, 3));
+
+        AgentExecutionResult result = executeSync(buildContext());
+
+        assertFalse(result.getToolCalls().isEmpty());
+        AgentExecutionContext.ToolCall call = result.getToolCalls().get(0);
+        Map<?, ?> toolResult = (Map<?, ?>) call.getResult();
+        assertNotNull(toolResult.get("blocked"));
+        assertEquals(Boolean.TRUE, toolResult.get("blocked"));
+    }
+
+    @Test
+    @DisplayName("真实工具：analyzeCode 检测出真实代码问题（空 catch、行过长）")
+    void realTool_analyzeCode_detectsRealIssues() throws Exception {
+        String badCode = """
+                public class Foo {
+                    public void bar() {
+                        try {
+                            doWork();
+                        } catch (Exception e) {
+                        }
+                        String s = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+                    }
+                }
+                """;
+
+        when(llmService.chat(any(LLMRequest.class)))
+                .thenReturn(successResponse(
+                        "```json\n{\"tool\": \"code_analyzer\", \"arguments\": {\"code\": " + jsonEscape(badCode) + ", \"language\": \"java\"}}\n```",
+                        20, 10))
+                .thenReturn(successResponse("Analysis done.", 5, 3));
+
+        AgentExecutionResult result = executeSync(buildContext());
+
+        assertFalse(result.getToolCalls().isEmpty());
+        AgentExecutionContext.ToolCall call = result.getToolCalls().get(0);
+        assertTrue(call.isSuccess());
+        Map<?, ?> toolResult = (Map<?, ?>) call.getResult();
+        List<?> issues = (List<?>) toolResult.get("issues");
+        // 应至少检测出空 catch 与过宽行两个问题
+        assertFalse(issues.isEmpty(), "analyzeCode should find real issues");
+        assertEquals(Boolean.TRUE, toolResult.get("analyzed"));
+    }
+
+    @Test
+    @DisplayName("真实工具：searchWeb 未配置端点时返回诚实提示而非伪造结果")
+    void realTool_searchWeb_noProvider_returnsHonestResult() throws Exception {
+        // 未配置 searchEndpoint（默认为空）
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "searchEndpoint", "");
+        // web_search 需要 read:web 权限
+        agent.setPermissions(List.of("read:code", "write:text", "read:web"));
+        when(agentRepository.findById(anyString())).thenReturn(Optional.of(agent));
+
+        when(llmService.chat(any(LLMRequest.class)))
+                .thenReturn(successResponse(
+                        "```json\n{\"tool\": \"web_search\", \"arguments\": {\"query\": \"team collaboration\"}}\n```",
+                        20, 10))
+                .thenReturn(successResponse("Done.", 5, 3));
+
+        AgentExecutionResult result = executeSync(buildContext());
+
+        assertFalse(result.getToolCalls().isEmpty());
+        AgentExecutionContext.ToolCall call = result.getToolCalls().get(0);
+        Map<?, ?> toolResult = (Map<?, ?>) call.getResult();
+        assertEquals(Boolean.FALSE, toolResult.get("configured"));
+        assertNotNull(toolResult.get("error"));
+    }
+
+    private String jsonEscape(String s) {
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\"";
     }
 }
