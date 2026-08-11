@@ -107,6 +107,13 @@ teammind:
     jwt-secret: ${TEAMMIND_JWT_SECRET:}
     jwt-expiration-seconds: 86400
 
+  # 工具执行配置
+  tools:
+    # 网络搜索服务端点（可选，未配置时 searchWeb 工具返回诚实提示而非伪造结果）
+    search-endpoint: ${TEAMMIND_SEARCH_ENDPOINT:}
+    # 网络搜索超时（毫秒）
+    search-timeout-ms: 5000
+
   # 进化配置
   evolution:
     enabled: true

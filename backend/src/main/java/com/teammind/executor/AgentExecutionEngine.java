@@ -9,11 +9,23 @@ import com.teammind.repository.AgentRepository;
 import com.teammind.websocket.WSEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Agent 执行引擎
@@ -34,6 +46,24 @@ public class AgentExecutionEngine {
 
     // 执行缓存
     private final Map<String, AgentExecutionContext> activeContexts = new ConcurrentHashMap<>();
+
+    /**
+     * 文件读取沙箱根目录（配置 teammind.data-path），防止路径穿越逃逸
+     */
+    @Value("${teammind.data-path:${user.home}/.teammind}")
+    private String dataPath;
+
+    /**
+     * 网络搜索提供商端点（可配置，未配置时工具返回诚实提示而非伪造结果）
+     */
+    @Value("${teammind.tools.search-endpoint:}")
+    private String searchEndpoint;
+
+    /**
+     * 网络搜索超时（毫秒）
+     */
+    @Value("${teammind.tools.search-timeout-ms:5000}")
+    private long searchTimeoutMs;
 
     /**
      * 构造函数 - 注入统一的有界线程池
@@ -465,22 +495,161 @@ public class AgentExecutionEngine {
     }
 
     /**
-     * ✅ 新增：代码分析工具
+     * 真实代码分析工具：扫描常见问题（过宽行、空 catch、TODO/FIXME、嵌套过深、
+     * 危险调用、重复空白等），并基于真实发现计算质量分。
      */
     private Map<String, Object> analyzeCode(String code, String language) {
         Map<String, Object> result = new HashMap<>();
         List<Map<String, Object>> issues = new ArrayList<>();
         
-        int lines = code.split("\n").length;
+        if (code == null) {
+            code = "";
+        }
+        String[] codeLines = code.split("\n", -1);
+        int lines = codeLines.length;
         int complexity = calculateComplexity(code);
-        int qualityScore = Math.max(0, 100 - issues.size() * 5 - complexity * 2);
-        
+
+        // 逐行扫描真实问题
+        int lineIndex = 0;
+        int nestingDepth = 0;
+        int maxNesting = 0;
+        boolean inBlockComment = false;
+        for (String line : codeLines) {
+            lineIndex++;
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+
+            // 块注释状态机（简化：// 与 /* */）
+            if (inBlockComment) {
+                if (trimmed.contains("*/")) {
+                    inBlockComment = false;
+                }
+                continue;
+            }
+            int blockStart = trimmed.indexOf("/*");
+            if (blockStart >= 0) {
+                int blockEnd = trimmed.indexOf("*/", blockStart);
+                if (blockEnd < 0) {
+                    inBlockComment = true;
+                    continue;
+                }
+            }
+            String noComment = stripLineComment(trimmed);
+            if (noComment.trim().isEmpty()) {
+                continue;
+            }
+
+            // 1. 行过长（> 120 字符，非注释）
+            if (line.length() > 120) {
+                issues.add(issue("line_too_long", "Line exceeds 120 characters (" + line.length() + ")", lineIndex, "high"));
+            }
+
+            // 3. TODO / FIXME / HACK 标记
+            if (Pattern.compile("(?i)\\b(todo|fixme|hack|xxx)\\b").matcher(noComment).find()) {
+                issues.add(issue("todo_marker", "TODO/FIXME marker left in code", lineIndex, "info"));
+            }
+
+            // 4. 危险调用（不完整示例集，用于真实检测）
+            for (String danger : DANGEROUS_CALLS) {
+                if (noComment.contains(danger)) {
+                    issues.add(issue("dangerous_call", "Potentially unsafe call: " + danger, lineIndex, "warning"));
+                    break;
+                }
+            }
+
+            // 5. 行尾空白
+            if (line.length() > trimmed.length()) {
+                issues.add(issue("trailing_whitespace", "Trailing whitespace at end of line", lineIndex, "low"));
+            }
+
+            // 6. 大括号缩进/嵌套深度统计（粗粒度）
+            nestingDepth += countOccurrences(noComment, "{") - countOccurrences(noComment, "}");
+            maxNesting = Math.max(maxNesting, nestingDepth);
+        }
+
+        // 2. 空 catch 块整体检测：catch (…) { …空… } 捕获空实现（可能跨行）
+        Matcher emptyCatch = EMPTY_CATCH_MULTILINE.matcher(code);
+        int emptyCatchCount = 0;
+        while (emptyCatch.find()) {
+            emptyCatchCount++;
+            issues.add(issue("empty_catch", "Empty catch block silently swallows exceptions", -1, "high"));
+        }
+        // 7. 嵌套过深
+        if (maxNesting > 5) {
+            issues.add(issue("deep_nesting", "Maximum nesting depth of " + maxNesting + " exceeds recommended limit of 5", -1, "medium"));
+        }
+
+        // 8. 重复行（简单启发：同一非空行出现 >= 3 次）
+        Map<String, Long> lineCounts = Arrays.stream(codeLines)
+                .map(String::trim)
+                .filter(l -> !l.isEmpty())
+                .collect(Collectors.groupingBy(l -> l, Collectors.counting()));
+        lineCounts.entrySet().stream()
+                .filter(e -> e.getValue() >= 3 && e.getKey().length() > 3)
+                .limit(5)
+                .forEach(e -> issues.add(issue("duplicated_line", "Duplicated line repeated " + e.getValue() + " times: '" + truncate(e.getKey(), 60) + "'", -1, "low")));
+
+        // 真实质量分：满分 100，按发现的问题严重度扣分，复杂度单独计
+        int issueDeduction = 0;
+        for (Map<String, Object> it : issues) {
+            String sev = String.valueOf(it.get("severity"));
+            switch (sev) {
+                case "high" -> issueDeduction += 15;
+                case "warning" -> issueDeduction += 8;
+                case "medium" -> issueDeduction += 5;
+                default -> issueDeduction += 2; // low/info
+            }
+        }
+        int qualityScore = Math.max(0, 100 - issueDeduction - Math.min(complexity, 20));
+
         result.put("issues", issues);
+        result.put("issue_count", issues.size());
+        result.put("empty_catch_count", emptyCatchCount);
         result.put("quality_score", qualityScore);
         result.put("complexity", complexity);
+        result.put("max_nesting_depth", maxNesting);
         result.put("lines_of_code", lines);
+        result.put("language", language);
+        result.put("analyzed", true);
         
         return result;
+    }
+
+    /** 常见危险调用特征（用于真实静态检测） */
+    private static final String[] DANGEROUS_CALLS = {
+        "eval(", "exec(", "Runtime.getRuntime().exec",
+        "ProcessBuilder", "child_process", "shell=True",
+        "SELECT * FROM", "DROP TABLE", "DELETE FROM", "INSERT INTO"
+    };
+
+    /** 空 catch 跨行整体检测：catch (…) { 只含空白 } */
+    private static final Pattern EMPTY_CATCH_MULTILINE =
+            Pattern.compile("catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}");
+
+    private Map<String, Object> issue(String type, String message, int line, String severity) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("type", type);
+        m.put("message", message);
+        if (line > 0) {
+            m.put("line", line);
+        }
+        m.put("severity", severity);
+        return m;
+    }
+
+    private String stripLineComment(String line) {
+        int idx = line.indexOf("//");
+        if (idx >= 0) {
+            return line.substring(0, idx);
+        }
+        return line;
+    }
+
+    private String truncate(String s, int max) {
+        if (s == null) return s;
+        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
     /**
@@ -511,26 +680,109 @@ public class AgentExecutionEngine {
     }
 
     /**
-     * ✅ 新增：网络搜索工具
+     * 真实网络搜索工具：若配置了 teammind.tools.search-endpoint 则发起 HTTP 请求；
+     * 否则返回诚实提示（未配置搜索服务），绝不返回伪造结果。
      */
     private Map<String, Object> searchWeb(String query) {
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("query", query);
-        result.put("results", List.of(
-            Map.of("title", "Result 1", "url", "https://example.com/1", "snippet", "..."),
-            Map.of("title", "Result 2", "url", "https://example.com/2", "snippet", "...")
-        ));
+        result.put("timestamp", LocalDateTime.now().toString());
+
+        if (query == null || query.trim().isEmpty()) {
+            result.put("error", "Empty search query");
+            result.put("results", List.of());
+            return result;
+        }
+
+        String endpoint = searchEndpoint == null ? "" : searchEndpoint.trim();
+        if (endpoint.isEmpty()) {
+            result.put("error", "No search provider configured (set teammind.tools.search-endpoint)");
+            result.put("results", List.of());
+            result.put("configured", false);
+            return result;
+        }
+
+        try {
+            WebClient client = WebClient.builder()
+                    .codecs(c -> c.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
+                    .build();
+            String uri = endpoint + (endpoint.contains("?") ? "&" : "?") + "q=" + urlEncode(query);
+            String body = client.get()
+                    .uri(uri)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block(Duration.ofMillis(Math.max(searchTimeoutMs, 1000)));
+            result.put("configured", true);
+            result.put("raw", body);
+            result.put("results", List.of(Map.of("source", "configured_provider", "content", truncate(body, 2000))));
+        } catch (Exception e) {
+            result.put("configured", true);
+            result.put("error", "Search request failed: " + e.getMessage());
+            result.put("results", List.of());
+        }
         return result;
     }
 
+    private String urlEncode(String s) {
+        try {
+            return java.net.URLEncoder.encode(s, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return s;
+        }
+    }
+
     /**
-     * ✅ 新增：文件读取工具
+     * 真实文件读取工具：仅在配置的沙箱根目录（teammind.data-path）内读取，
+     * 防止路径穿越（../）逃逸到沙箱之外。
      */
     private Map<String, Object> readFile(String path) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("path", path);
-        result.put("content", "File content would be read here");
-        result.put("size", 1024);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("requested_path", path);
+
+        if (path == null || path.trim().isEmpty()) {
+            result.put("error", "Empty file path");
+            return result;
+        }
+
+        try {
+            Path sandboxRoot = Paths.get(dataPath == null || dataPath.trim().isEmpty()
+                    ? System.getProperty("user.home") + "/.teammind" : dataPath)
+                    .toAbsolutePath().normalize();
+            Path target = Paths.get(path).toAbsolutePath().normalize();
+
+            // 关键：拒绝任何逃逸沙箱根目录的路径
+            if (!target.startsWith(sandboxRoot)) {
+                result.put("error", "Path is outside the sandbox root and was blocked: " + sandboxRoot);
+                result.put("blocked", true);
+                return result;
+            }
+
+            if (!Files.exists(target)) {
+                result.put("error", "File not found: " + path);
+                return result;
+            }
+            if (Files.isDirectory(target)) {
+                List<String> entries;
+                try (var stream = Files.list(target)) {
+                    entries = stream.map(p -> p.getFileName().toString()).sorted().collect(Collectors.toList());
+                }
+                result.put("is_directory", true);
+                result.put("entries", entries);
+                result.put("size", entries.size());
+                return result;
+            }
+
+            String content = Files.readString(target, StandardCharsets.UTF_8);
+            long size = Files.size(target);
+            result.put("path", target.toString());
+            result.put("content", content);
+            result.put("size", size);
+            result.put("lines", content.split("\n", -1).length);
+        } catch (InvalidPathException e) {
+            result.put("error", "Invalid path: " + path);
+        } catch (IOException e) {
+            result.put("error", "Failed to read file: " + e.getMessage());
+        }
         return result;
     }
 
