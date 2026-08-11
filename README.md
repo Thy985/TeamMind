@@ -143,9 +143,15 @@ TeamMind/
 | 能力 | 说明 |
 |------|------|
 | **Prompt 自我优化** | LLM 分析反馈，自动优化 Agent Prompt |
-| **工具自动生成** | 根据需求描述生成新的工具代码 |
+| **工具自动生成** | 根据需求描述生成新的工具代码，**生成即接入执行引擎（toolType 声明，生成即可用）** |
 | **协作拓扑进化** | 动态优化多 Agent 协作结构 |
 | **版本管理** | 保存进化历史，支持回滚 |
+| **进化门禁决策** | 基于真实执行指标做准入控制：样本不足/冷却期内/能力已达标时拒绝并给出可解释原因 |
+| **自动进化调度** | 基于成功率/Token 效率/评分阈值自动触发对应进化，带冷却防抖 |
+| **进化效果对比** | 每次进化记录前后真实指标快照，量化进化收益、可验收 |
+
+> 进化由**真实执行指标闭环**驱动（任务成功率、Token 成本效率、用户评分），
+> 门禁在消耗 LLM 成本前先评估是否值得进化，避免盲目进化导致能力倒退。
 
 ### API 端点
 
@@ -192,6 +198,17 @@ curl http://localhost:8080/api/agents
 curl -X POST http://localhost:8080/api/agents/agent-1/evolve \
   -H "Content-Type: application/json" \
   -d '{"type": "PROMPT_OPTIMIZATION", "reason": "Improve accuracy"}'
+
+# 强制进化（跳过门禁，高权限操作）
+curl -X POST http://localhost:8080/api/agents/agent-1/evolve \
+  -H "Content-Type: application/json" \
+  -d '{"type": "PROMPT_OPTIMIZATION", "reason": "Force", "context": {"force": true}}'
+
+# 查看进化历史（含前后指标快照，用于效果对比）
+curl http://localhost:8080/api/agents/agent-1/evolution/history
+
+# 获取 Agent 真实执行指标（成功率/Token效率/评分）
+curl http://localhost:8080/api/agents/agent-1/metrics
 ```
 
 ## 📜 License

@@ -1,5 +1,7 @@
 package com.teammind.dto;
 
+import java.util.Map;
+
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -22,4 +24,14 @@ public class EvolutionResultDTO {
     private Double scoreChange;
     private Boolean success;
     private String rollbackUrl;
+
+    /**
+     * 进化前真实指标快照（用于前后对比验收）
+     */
+    private Map<String, Object> metricsBefore;
+
+    /**
+     * 进化后真实指标快照（用于前后对比验收）
+     */
+    private Map<String, Object> metricsAfter;
 }

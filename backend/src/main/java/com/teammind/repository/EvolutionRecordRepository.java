@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Evolution Record Repository
@@ -19,6 +20,10 @@ public interface EvolutionRecordRepository extends JpaRepository<EvolutionRecord
     List<EvolutionRecord> findByAgentIdOrderByCreatedAtDesc(String agentId);
 
     Page<EvolutionRecord> findByAgentIdOrderByCreatedAtDesc(String agentId, Pageable pageable);
+
+    Optional<EvolutionRecord> findFirstByAgentIdAndIsRolledBackFalseOrderByCreatedAtDesc(String agentId);
+
+    Optional<EvolutionRecord> findFirstByAgentIdAndTypeAndIsRolledBackFalseOrderByCreatedAtDesc(String agentId, EvolutionType type);
 
     List<EvolutionRecord> findByType(EvolutionType type);
 

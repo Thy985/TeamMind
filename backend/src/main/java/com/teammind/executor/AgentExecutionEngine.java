@@ -354,7 +354,8 @@ public class AgentExecutionEngine {
             }
 
             // ✅ 修复：实现真实工具而非模拟
-            Object result = executeRealTool(request.name, request.arguments);
+            // 内置工具 + 进化生成的动态工具（生成即可用）
+            Object result = executeRealTool(agent, request.name, request.arguments);
             toolCall.setResult(result);
             toolCall.setSuccess(true);
 
@@ -387,9 +388,9 @@ public class AgentExecutionEngine {
     }
 
     /**
-     * ✅ 新增：执行真实工具
+     * ✅ 新增：执行真实工具（内置工具 + 进化生成的动态工具）
      */
-    private Object executeRealTool(String toolName, Map<String, Object> arguments) throws Exception {
+    private Object executeRealTool(Agent agent, String toolName, Map<String, Object> arguments) throws Exception {
         switch (toolName.toLowerCase()) {
             case "code_analyzer":
                 return analyzeCode((String) arguments.get("code"), 
@@ -406,9 +407,61 @@ public class AgentExecutionEngine {
                 return readFile((String) arguments.get("path"));
             
             default:
+                // 尝试调度进化生成的动态工具（生成即可用）
+                Object dynamic = executeDynamicTool(agent, toolName, arguments);
+                if (dynamic != null) {
+                    return dynamic;
+                }
                 // 未知工具，使用模拟
                 return simulateTool(toolName, arguments);
         }
+    }
+
+    /**
+     * ✅ 新增：执行进化生成的动态工具
+     *
+     * 闭环：EvolutionEngine.generateTool 将 LLM 生成的工具写入 Agent.tools，
+     * 这里在执行时从 Agent.tools 中按名称查找并调度。工具需声明其执行能力
+     * （toolType），可复用内置的真实执行能力，实现"生成即可用"。
+     *
+     * @return 执行结果；若未找到或不可执行则返回 null
+     */
+    private Object executeDynamicTool(Agent agent, String toolName, Map<String, Object> arguments) {
+        if (agent == null || agent.getTools() == null) {
+            return null;
+        }
+        for (Map<String, Object> tool : agent.getTools()) {
+            if (toolName.equalsIgnoreCase(String.valueOf(tool.get("name")))) {
+                // 依据声明的能力类型委托给内置真实执行能力
+                String toolType = String.valueOf(tool.get("toolType"));
+                try {
+                    switch (toolType.toLowerCase()) {
+                        case "text_processor":
+                            return processText(
+                                    (String) arguments.get("text"),
+                                    (String) arguments.get("operation"));
+                        case "code_analyzer":
+                            return analyzeCode(
+                                    (String) arguments.get("code"),
+                                    (String) arguments.get("language"));
+                        case "web_search":
+                            return searchWeb((String) arguments.get("query"));
+                        case "file_reader":
+                            return readFile((String) arguments.get("path"));
+                        default:
+                            log.warn("Dynamic tool '{}' has unsupported toolType '{}'", toolName, toolType);
+                            return Map.of(
+                                    "error", "Dynamic tool registered but toolType '" + toolType
+                                            + "' is not executable by this runtime",
+                                    "tool", toolName);
+                    }
+                } catch (Exception e) {
+                    log.warn("Dynamic tool '{}' execution failed: {}", toolName, e.getMessage());
+                    return Map.of("error", "Dynamic tool execution failed: " + e.getMessage(), "tool", toolName);
+                }
+            }
+        }
+        return null;
     }
 
     /**
