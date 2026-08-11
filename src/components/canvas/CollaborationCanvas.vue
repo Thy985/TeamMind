@@ -4,8 +4,9 @@ import { VueFlow, useVueFlow, type Node, type Edge } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import AgentNode from './AgentNode.vue'
-import type { MissionNode, MissionEdge } from '@/types'
+import type { MissionNode, MissionEdge, AgentStatus, WSEvent } from '@/types'
 import { useMissionStore } from '@/stores'
+import { useWebSocketListener } from '@/composables/useWebSocket'
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css'
@@ -22,6 +23,58 @@ const emit = defineEmits<{
 
 const missionStore = useMissionStore()
 const { onNodeClick, fitView } = useVueFlow()
+
+// 将后端 node_update / agent_status_update 事件中的状态映射为画布可识别的节点状态
+function normalizeStatus(raw: unknown): AgentStatus {
+  const s = String(raw ?? '').toLowerCase()
+  switch (s) {
+    case 'running':
+    case 'started':
+      return 'running'
+    case 'success':
+    case 'completed':
+      return 'success'
+    case 'error':
+    case 'failed':
+      return 'error'
+    case 'waiting':
+      return 'waiting'
+    default:
+      return 'idle'
+  }
+}
+
+// 处理 WebSocket 实时节点更新事件
+function handleNodeUpdate(event: WSEvent) {
+  // 仅处理当前任务的事件
+  if (props.missionId && event.missionId && event.missionId !== props.missionId) return
+  const payload = (event.payload || event.data || {}) as Record<string, unknown>
+  const nodeId = String(payload.nodeId ?? '')
+  const status = normalizeStatus(payload.status)
+  if (!nodeId) return
+  missionStore.updateNodeStatus(nodeId, status)
+}
+
+// 处理 Agent 状态更新事件
+function handleAgentStatusUpdate(event: WSEvent) {
+  if (props.missionId && event.missionId && event.missionId !== props.missionId) return
+  const payload = (event.payload || event.data || {}) as Record<string, unknown>
+  const agentId = String(payload.agentId ?? '')
+  const status = normalizeStatus(payload.status)
+  // Agent 事件可能用 agentId 关联节点 id
+  if (!agentId) return
+  missionStore.updateNodeStatus(agentId, status)
+}
+
+// 订阅 WebSocket 事件，画布节点状态随任务执行实时刷新
+// immediate: true 会在挂载时自动连接并订阅任务专属频道
+useWebSocketListener(['node_update', 'agent_status_update'], (event) => {
+  if (event.type === 'node_update') {
+    handleNodeUpdate(event)
+  } else if (event.type === 'agent_status_update') {
+    handleAgentStatusUpdate(event)
+  }
+}, { immediate: true, missionId: props.missionId })
 
 // Node types
 const nodeTypes = {

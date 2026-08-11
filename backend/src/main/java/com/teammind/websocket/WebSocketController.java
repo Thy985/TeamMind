@@ -7,6 +7,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -20,6 +21,7 @@ import java.util.Map;
 public class WebSocketController {
 
     private final WSEventPublisher eventPublisher;
+    private final ResolutionService resolutionService;
 
     /**
      * 订阅任务
@@ -53,10 +55,26 @@ public class WebSocketController {
         String resolutionId = (String) message.get("resolutionId");
         String optionId = (String) message.get("optionId");
         String agentId = (String) message.get("agentId");
-        
+        String missionId = (String) message.get("missionId");
+
+        if (resolutionId == null || optionId == null) {
+            log.warn("Invalid vote message (missing resolutionId/optionId): {}", message);
+            return;
+        }
+
         log.info("Vote received: resolution={}, option={}, agent={}", resolutionId, optionId, agentId);
-        
-        // TODO: 处理投票逻辑
+
+        // 记录投票并广播投票更新
+        Map<String, Integer> votes = resolutionService.recordVote(resolutionId, agentId, optionId);
+        eventPublisher.publishResolutionVote(missionId, resolutionId, agentId, optionId);
+
+        // 检查是否达成多数一致，若达成则广播决议结果并清理状态
+        String resolvedOption = resolutionService.resolveIfConsensus(resolutionId);
+        if (resolvedOption != null) {
+            eventPublisher.publishResolutionResolved(missionId, resolutionId, resolvedOption, new HashMap<>(votes));
+            resolutionService.clearResolution(resolutionId);
+            log.info("Resolution {} resolved with option {}", resolutionId, resolvedOption);
+        }
     }
 
     /**

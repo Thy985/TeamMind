@@ -9,8 +9,12 @@ echo [INFO] Backend:  http://localhost:8080
 echo [INFO] Frontend: http://localhost:3000
 echo.
 
-:: 设置环境变量
-set QIANFAN_API_KEY=bce-v3/ALTAKSP-W8fnSI7P0cqEcBxE6SYuM/94fd0c1e5615d09b244576df2d68dfd0739ed5f2
+:: 请先设置环境变量 QIANFAN_API_KEY（勿在脚本中硬编码真实 Key）
+:: set QIANFAN_API_KEY=your-qianfan-api-key-here
+if "%QIANFAN_API_KEY%"=="" (
+    echo [WARN] QIANFAN_API_KEY is not set. LLM calls will fail.
+    echo         Please set it:  set QIANFAN_API_KEY=your-key
+)
 set QIANFAN_BASE_URL=https://qianfan.baidubce.com/v2/coding
 
 :: 启动后端（新窗口）

@@ -8,14 +8,44 @@ module.exports = {
   extends: [
     'plugin:vue/vue3-recommended',
     'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
   ],
   parser: 'vue-eslint-parser',
   parserOptions: {
+    parser: '@typescript-eslint/parser',
     ecmaVersion: 2022,
     sourceType: 'module',
-    parser: '@typescript-eslint/parser',
+    extraFileExtensions: ['.vue'],
   },
+  plugins: ['@typescript-eslint'],
+  rules: {
+    // 允许在模板和脚本中使用 any 等宽松写法，避免过度约束
+    'vue/multi-word-component-names': 'off',
+    'vue/valid-v-slot': ['error', { allowModifiers: true }],
+    'no-unused-vars': 'off',
+    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    'no-undef': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/no-non-null-assertion': 'off',
+  },
+  ignorePatterns: [
+    'dist',
+    'node_modules',
+    'backend/target',
+    'public',
+    '*.d.ts',
+  ],
   overrides: [
+    {
+      files: ['*.ts', '*.tsx', '*.vue'],
+      parser: 'vue-eslint-parser',
+      parserOptions: {
+        parser: '@typescript-eslint/parser',
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        extraFileExtensions: ['.vue'],
+      },
+    },
     {
       files: ['*.ts', '*.tsx'],
       parser: '@typescript-eslint/parser',
@@ -26,22 +56,5 @@ module.exports = {
         '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       },
     },
-  ],
-  rules: {
-    // 允许在模板和脚本中使用 any 等宽松写法，避免过度约束
-    'vue/multi-word-component-names': 'off',
-    'vue/valid-v-slot': ['error', { allowModifiers: true }],
-    'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-    'no-undef': 'off',
-    // 关闭与 TS 冲突/冗余的规则，交由 TS 处理
-    '@typescript-eslint/no-explicit-any': 'off',
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-  },
-  ignorePatterns: [
-    'dist',
-    'node_modules',
-    'backend/target',
-    'public',
-    '*.d.ts',
   ],
 };

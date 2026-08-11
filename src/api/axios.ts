@@ -26,12 +26,8 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    // 记录请求
-    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, {
-      requestId,
-      params: config.params,
-      data: config.data
-    })
+    // 记录请求（生产环境建议关闭；此处仅保留方法+URL，不打印敏感 payload）
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, { requestId })
 
     return config
   },

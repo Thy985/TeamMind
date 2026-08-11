@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+coverage
+coverage/*
 
 # Build artifacts
 backend/target
@@ -25,3 +27,11 @@ backend/target
 *.njsproj
 *.sln
 *.sw?
+
+# 环境变量（含密钥）——切勿提交真实密钥
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example

@@ -17,7 +17,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/llm")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class LLMController {
 
     private final LLMService llmService;

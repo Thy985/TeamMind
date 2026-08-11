@@ -173,6 +173,9 @@ public class AgentService {
         
         log.info("Triggering {} evolution for agent: {}", type, agentId);
 
+        // 进化前指标快照（用于前后对比验收）
+        Map<String, Object> metricsBefore = agentMetricsService.getAgentMetrics(agentId);
+
         // 发布进化触发事件
         eventPublisher.publishEvolutionTriggered(agentId, type.name(), request.getReason());
 
@@ -180,6 +183,10 @@ public class AgentService {
         EvolutionResultDTO result = evolutionEngine.evolve(agent, type, request);
 
         if (result.getSuccess()) {
+            // 进化后指标快照（用于前后对比验收）
+            result.setMetricsBefore(metricsBefore);
+            result.setMetricsAfter(agentMetricsService.getAgentMetrics(agentId));
+
             // 更新 Agent 版本
             agent.setEvolutionVersion(result.getToVersion());
             agent.setUpdatedAt(LocalDateTime.now());
