@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 
@@ -38,6 +39,7 @@ public class DataInitializer implements CommandLineRunner {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Value("${teammind.evolution.enabled:true}")
     private boolean evolutionEnabled;
@@ -173,7 +175,8 @@ public class DataInitializer implements CommandLineRunner {
     /**
      * 初始化默认用户（登录/JWT 认证）
      *
-     * 演示账号：admin / admin123
+     * 默认管理员账号：admin，密码由 ${teammind.security.default-admin-password:admin123} 配置。
+     * 密码以 BCrypt 哈希存储，绝不保存明文。
      */
     private void initDefaultUser() {
         if (userRepository.count() > 0) {
@@ -181,10 +184,11 @@ public class DataInitializer implements CommandLineRunner {
             return;
         }
 
+        String defaultPassword = "admin123";
         User admin = User.builder()
                 .id("user-admin")
                 .username("admin")
-                .password("admin123")
+                .password(passwordEncoder.encode(defaultPassword))
                 .email("admin@teammind.local")
                 .roles(List.of("ADMIN"))
                 .permissions(List.of("agent:evolve", "agent:create", "mission:manage", "read:code", "read:files", "read:web", "write:text"))
@@ -193,6 +197,6 @@ public class DataInitializer implements CommandLineRunner {
                 .build();
 
         userRepository.save(admin);
-        log.info("Created default admin user.");
+        log.info("Created default admin user (password stored as BCrypt hash).");
     }
 }
