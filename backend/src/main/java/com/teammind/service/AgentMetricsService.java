@@ -110,6 +110,16 @@ public class AgentMetricsService {
     }
 
     /**
+     * 计算 Agent 的真实任务成功率（0~1）。
+     * 无样本时返回中性值 0.5，避免早期指标波动。
+     */
+    public double successRate(Agent agent) {
+        long total = agent.getTotalMissions() != null ? agent.getTotalMissions() : 0L;
+        long successful = agent.getSuccessfulMissions() != null ? agent.getSuccessfulMissions() : 0L;
+        return total > 0 ? (double) successful / total : 0.5;
+    }
+
+    /**
      * 基于真实指标计算进化收益分数（替代启发式打分）
      *
      * 综合三个真实维度，输出 0~1 的收益分：

@@ -188,6 +188,8 @@ class EvolutionEngineTest {
         // 工具已附加到 Agent
         assertNotNull(agent.getTools());
         assertEquals(1, agent.getTools().size());
+        // 关键：自动推断可执行能力类型（toolType），使 AgentExecutionEngine 能调度（生成即可用）
+        assertEquals("code_analyzer", agent.getTools().get(0).get("toolType"));
     }
 
     @Test

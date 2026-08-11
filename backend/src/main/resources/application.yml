@@ -110,7 +110,22 @@ teammind:
     enabled: true
     auto-save: true
     max-history-versions: 50
-    
+
+    # 进化门禁决策（准入控制）
+    gate:
+      enabled: true
+      min-missions: 5
+      cooldown-minutes: 30
+      high-success-threshold: 0.9
+
+    # 自动进化调度（基于真实指标阈值触发）
+    auto-scheduler:
+      enabled: false
+      interval-ms: 3600000
+      low-success-threshold: 0.6
+      high-token-per-task: 8000
+      low-rating-threshold: 3.0
+
     # Prompt 优化配置
     prompt-optimization:
       enabled: true
