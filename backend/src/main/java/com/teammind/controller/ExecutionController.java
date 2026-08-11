@@ -20,7 +20,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class ExecutionController {
 
     private final AgentExecutionEngine executionEngine;
