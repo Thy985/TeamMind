@@ -1,0 +1,28 @@
+# Single-Agent Pipeline
+# Simple implementation → verify chain for Task 1B
+
+name: single-agent
+description: "Single agent (Codex/Claude) implements task, then verifiers check results"
+
+steps:
+  - name: implement
+    role: LEAD
+    agent: codex
+    prompt: "{{objective}}"
+    timeout: 300000          # 5 minutes
+    on_failure: retry_or_fail
+    verification:
+      - type: git-verifier
+      - type: test-runner-verifier
+
+  - name: verify
+    role: VERIFIER
+    agents:
+      - git-verifier
+      - test-runner-verifier
+    on_all_pass: done
+    on_any_fail: retry_implement
+
+retry:
+  max_attempts: 3
+  backoff_ms: 5000
