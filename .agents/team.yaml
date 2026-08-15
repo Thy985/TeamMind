@@ -1,0 +1,24 @@
+# TeamMind Dev Team — Phase 1A
+
+## Agents
+
+| Agent | Binary | Worktree | Branch | Role | Scope |
+|-------|--------|----------|--------|------|-------|
+| Codex | `codex` | `D:\DevWorkspaces\teammind-workspace\teammind-wt-codex` | `w7-codex-runtime` | Implementation Lead | Phase 1A runtime entities |
+| Claude Code | `claude` | `D:\DevWorkspaces\teammind-workspace\teammind-wt-claude` | `w7-claude-review` | Architecture Reviewer | Reviews Codex findings only |
+
+## Protocol
+
+1. **Codex** reads the spec in `.agents/tasks/w7-1a-runtime-contract.md`
+2. **Codex** implements in its worktree, commits to `w7-codex-runtime`
+3. **Claude Code** reads the codex branch diff, outputs review to `.agents/handoffs/review-001.md`
+4. **Codex** fixes based on findings, new commit
+5. **Regression tests pass** → freeze Runtime Contract
+
+## Constraints
+
+- Codex ONLY touches `backend/src/main/java` and `backend/src/test/java`
+- Codex does NOT touch frontend/, docs/, .agents/
+- No PipelineOrchestrator, no WebSocket changes, no multi-agent logic
+- All new abstractions must explain their impact on: Execution, State, Artifact, Evidence, Event, Command, Recovery
+- Java 17, Spring Boot 3.3.7, Lombok, JPA, SQLite
