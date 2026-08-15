@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -371,9 +372,11 @@ class AgentExecutionEngineTest {
         agent.setPermissions(List.of("read:code", "write:text", "read:files"));
         when(agentRepository.findById(anyString())).thenReturn(Optional.of(agent));
 
+        // Windows 路径中的反斜杠需在 JSON 中转义为 \\
+        String escapedPath = realFile.toString().replace("\\", "\\\\");
         when(llmService.chat(any(LLMRequest.class)))
                 .thenReturn(successResponse(
-                        "```json\n{\"tool\": \"file_reader\", \"arguments\": {\"path\": \"" + realFile + "\"}}\n```",
+                        "```json\n{\"tool\": \"file_reader\", \"arguments\": {\"path\": \"" + escapedPath + "\"}}\n```",
                         20, 10))
                 .thenReturn(successResponse("Done reading.", 5, 3));
 
@@ -400,10 +403,12 @@ class AgentExecutionEngineTest {
 
         // 绝对路径指向沙箱之外的目录
         String outside = Files.createTempDirectory("outside-sandbox").resolve("secret.txt").toString();
+        // Windows 路径反斜杠在 JSON 中需转义
+        String escapedOutside = outside.replace("\\", "\\\\");
 
         when(llmService.chat(any(LLMRequest.class)))
                 .thenReturn(successResponse(
-                        "```json\n{\"tool\": \"file_reader\", \"arguments\": {\"path\": \"" + outside + "\"}}\n```",
+                        "```json\n{\"tool\": \"file_reader\", \"arguments\": {\"path\": \"" + escapedOutside + "\"}}\n```",
                         20, 10))
                 .thenReturn(successResponse("Done.", 5, 3));
 

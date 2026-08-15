@@ -1,216 +1,287 @@
 # 🧠 TeamMind
 
-一个支持智能体自主进化的 AI Agent 协作平台，支持多 Agent 实时协作可视化。
+**Project AI Team Runtime**
+*One Project. One AI Team. Each Agent with its own Philosophy.*
 
-## 📋 技术栈
+> 给每个代码项目配置一支由不同 AI Agent 组成的有哲学互补的工程团队，
+> 让它们围绕共享项目状态真正协同完成任务，并随项目运行逐渐进化。
 
-### 前端
-- **框架**: Vue 3.5+ (Composition API + `<script setup>`)
-- **语言**: TypeScript (严格模式)
-- **构建工具**: Vite 5+
-- **状态管理**: Pinia 3+
-- **路由**: Vue Router 4
-- **UI 组件库**: Naive UI 2.44+
-- **协作画布**: Vue Flow 1.48+
+---
 
-### 后端
-- **框架**: Spring Boot 3.2+
-- **语言**: Java 17+
-- **数据库**: SQLite (零配置)
-- **配置存储**: Markdown 文件
-- **实时通信**: WebSocket (STOMP)
+## 它解决什么问题
 
-### LLM 支持
-- ✅ **百度千帆** (ERNIE-4.0, ERNIE-3.5 等)
-- ✅ **OpenAI** (GPT-4, GPT-3.5)
-- ✅ **Anthropic** (Claude 3)
-- 🔧 **Azure OpenAI**
-- 🔧 **本地模型** (Ollama)
+你装了 Claude Code、Codex、Aider 三个 Agent CLI，但每次开发：
 
-## 🚀 快速开始
+- 复杂任务用 Claude 写代码 → 手动复制到 Codex 让它审查 → 再回到 Claude 修改 → 再用 Aider 补测试
+- 不同 CLI 之间的对话完全割裂，每次都从头讲
+- 不知道哪个 Agent 应该负责什么，出问题不知道找谁
+- 不知道哪个 Agent 在你这个项目里表现最好
 
-### 环境要求
+**TeamMind 让你给项目配一支有哲学互补的 AI 团队：**
 
-- Node.js 18+
+```
+Project: FormulaFix
+
+  Team Profile: High Assurance
+  
+  AI Team
+  ─────────────────────────────
+  🔹 Codex          LEAD        执行 / 构建 / 测试闭环
+  🔸 Claude Code    SECURITY    安全 / 权限 / 显式审批
+  🔸 Aider          REFACTORER  快速定向编辑
+
+  用户输入：修复 LaTeX 渲染错位问题，不破坏 E2E
+
+  [自动执行]
+  Codex 分析 → 修改代码
+       ↓
+  Claude Code 审查 → 发现 2 处权限边界问题
+       ↓
+  Codex 修复 → Aider 补充测试
+       ↓
+  [最终结果 + 验证证据]
+  Changes:  7 files, +183 / -79
+  Review:   Claude: 2 issues found, 2 resolved
+  Tests:    42 passed, 0 failed
+  Evidence: 5 verified items
+
+  [Project Profile 更新]
+  Codex (LEAD):    implementation +0.02
+  Claude (SECURITY): review_quality +0.01
+```
+
+---
+
+## 设计哲学（三层）
+
+### 第一层：Everything is a Plugin
+
+```
+TeamMind Core
+    │
+Cordis-like Plugin Runtime
+    │
+    ├─ Agent Plugins    (Claude / Codex / Aider / OpenCode / Gemini / 自定义)
+    ├─ Verifier Plugins (Test Runner / Lint / Static Analysis)
+    ├─ Memory Plugins   (Project Memory / Task Memory)
+    └─ Integration Plugins (GitHub / GitLab / Jira)
+```
+
+核心系统根本不需要知道 Claude 是什么、Codex 是什么。它只懂 Plugin 接口。
+
+### 第二层：Everything is a Capability
+
+```
+Lead Agent 想：
+  ❌ "我要调用 Codex。"
+  
+Lead Agent 想：
+  ✅ "我现在需要代码审查能力。"
+  ✅ "Runtime，帮我找一个最合适的 Agent。"
+```
+
+Runtime 按**能力 + 哲学 + 历史表现**评分后自动选择。
+
+### 第三层：Every Agent brings its own Philosophy
+
+```
+Claude Code = 安全 / 权限 / 显式审批的工程师
+Codex       = 执行 / 构建 / 测试闭环的工程师
+Aider       = 快速定向编辑的工程师
+Gemini CLI  = 研究 / 多模态 / 大上下文的工程师
+OpenCode    = 灵活 / 开源 / 隐私本地的工程师
+```
+
+不同 CLI 是不同**工程方法论**，TeamMind 让这些方法论形成**异质性冗余交叉验证**。
+
+---
+
+## 核心差异化
+
+| 维度 | 通用 CLI 编排 | TeamMind |
+|---|---|---|
+| 思考模型 | "把几个 CLI 串起来" | "组建一支有哲学互补的 AI 团队" |
+| 抽象层次 | 工具箱 | Runtime |
+| Agent 之间传什么 | stdout 文本 | **Task Artifact + Evidence** |
+| 调度依据 | CLI 名字 | **Capability + Philosophy + 历史表现** |
+| 验证机制 | 信任 Agent 自报 | **独立 Evidence Verifier** |
+| 自适应性 | 静态 | **自适应 Role Evolution** |
+| 长期价值 | CLI 配置 | **项目级 AI 工程知识库** |
+| 护城河 | 可复制 | **不可复制**（项目历史数据） |
+
+**一句话**：
+> **不是选择最强的 Agent，而是让不同 Agent 在最适合自己的位置协同工作。**
+
+---
+
+## 工作原理（30 秒看懂）
+
+```
+                TeamMind Runtime (localhost:8080)
+                          │
+                    ┌─────┴─────┐
+                    │  Core    │
+                    │Orchestrator
+                    └─────┬─────┘
+                          │
+            ┌─────────────┼─────────────┐
+            ↓             ↓             ↓
+       Project State  Capability   Evidence
+       (SQLite)       Routing      Verifier
+            │             │             │
+            └─────────────┼─────────────┘
+                          │
+                  Plugin Runtime
+                  ┌───────┼────────┐
+                  ↓       ↓        ↓
+              Claude   Codex    Aider
+              Plugin   Plugin   Plugin
+                ↓         ↓         ↓
+              CLI      CLI       CLI
+```
+
+---
+
+## 快速开始（5 分钟）
+
+### 前置要求
+
 - JDK 17+
 - Maven 3.8+
+- Node.js 18+
+- 至少一个 AI Agent CLI：
+  - [Claude Code](https://github.com/anthropics/claude-code)
+  - [Codex CLI](https://github.com/openai/codex)
+  - [Aider](https://github.com/Aider-AI/aider)
+  - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+  - [OpenCode](https://github.com/opencode-ai/opencode)
 
-### 一键启动（推荐）
+### 一键启动（Windows）
 
-Windows 用户：
-
-```bash
-# 双击运行或在命令行执行
+```cmd
+git clone https://github.com/yourname/teammind.git
+cd teammind
 start-all.bat
 ```
 
-这将同时启动后端 (localhost:8080) 和前端 (localhost:3000)。
-
-### 手动启动
-
-#### 1. 启动后端
+### CLI 探测 demo
 
 ```bash
 cd backend
-
-# Windows
-start.bat
-
-# 或手动设置环境变量（请替换为你的真实 Key）
-export QIANFAN_API_KEY=your-qianfan-api-key-here
-mvn spring-boot:run
+mvn -B compile
+java -cp target/classes com.teammind.cli.registry.CLIDiscovery
 ```
 
-#### 2. 启动前端
-
-```bash
-# 安装依赖（首次）
-npm install
-
-# 启动开发服务器
-npm run dev
-```
-
-访问 http://localhost:3000
-
-## 🔧 配置
-
-### LLM 配置
-
-后端支持多种 LLM 提供商，在 `backend/src/main/resources/application.yml` 中配置：
-
-```yaml
-teammind:
-  llm:
-    default-provider: qianfan  # 可选: qianfan, openai, anthropic
-    
-    # 百度千帆（推荐）
-    qianfan:
-      api-key: ${QIANFAN_API_KEY}
-      base-url: https://qianfan.baidubce.com/v2/coding
-      default-model: ERNIE-4.0-8K
-    
-    # OpenAI（备用）
-    openai:
-      api-key: ${OPENAI_API_KEY}
-    
-    # Anthropic（备用）
-    anthropic:
-      api-key: ${ANTHROPIC_API_KEY}
-```
-
-### 前端环境变量
-
-```bash
-# .env.development
-VITE_API_BASE_URL=http://localhost:8080/api
-VITE_WS_URL=ws://localhost:8080/ws
-```
-
-## 📁 项目结构
+输出示例：
 
 ```
-TeamMind/
-├── src/                      # 前端源码
-│   ├── api/                  # API 通信
-│   ├── components/           # Vue 组件
-│   ├── pages/                # 页面组件
-│   ├── stores/               # Pinia 状态管理
-│   └── types/                # TypeScript 类型
-│
-├── backend/                  # 后端源码
-│   ├── src/main/java/com/teammind/
-│   │   ├── controller/       # REST API
-│   │   ├── service/          # 业务逻辑
-│   │   ├── entity/           # 数据库实体
-│   │   ├── llm/              # LLM 集成
-│   │   ├── evolution/        # 进化引擎
-│   │   ├── executor/         # 执行引擎
-│   │   └── websocket/        # WebSocket
-│   └── src/main/resources/
-│       ├── application.yml   # 配置文件
-│       └── agents/           # Agent Markdown 配置
-│
-├── start-all.bat             # 一键启动脚本
-├── start-frontend.bat        # 启动前端
-└── backend/start.bat         # 启动后端
+=================================================
+ TeamMind CLI Auto-Discovery
+=================================================
+
+  [OK] claude-code  Claude Code   v2.1.215
+  [OK] codex        Codex CLI     v0.144.5
+
+  Detected: 2 / 5 CLIs
 ```
 
-## 🎯 核心功能
+---
 
-### Agent 进化能力
+## 文档
 
-| 能力 | 说明 |
-|------|------|
-| **Prompt 自我优化** | LLM 分析反馈，自动优化 Agent Prompt |
-| **工具自动生成** | 根据需求描述生成新的工具代码，**生成即接入执行引擎（toolType 声明，生成即可用）** |
-| **协作拓扑进化** | 动态优化多 Agent 协作结构 |
-| **版本管理** | 保存进化历史，支持回滚 |
-| **进化门禁决策** | 基于真实执行指标做准入控制：样本不足/冷却期内/能力已达标时拒绝并给出可解释原因 |
-| **自动进化调度** | 基于成功率/Token 效率/评分阈值自动触发对应进化，带冷却防抖 |
-| **进化效果对比** | 每次进化记录前后真实指标快照，量化进化收益、可验收 |
+### 设计文档
 
-> 进化由**真实执行指标闭环**驱动（任务成功率、Token 成本效率、用户评分），
-> 门禁在消耗 LLM 成本前先评估是否值得进化，避免盲目进化导致能力倒退。
+- [docs/runtime/core-model.md](docs/runtime/core-model.md) - **核心数据模型（必读）**
+- [docs/runtime/plugin-system.md](docs/runtime/plugin-system.md) - Cordis-like Plugin Runtime
+- [docs/runtime/capability-routing.md](docs/runtime/capability-routing.md) - 能力路由 + **8 因素评分 + Team Policy**
+- [docs/runtime/role-evolution.md](docs/runtime/role-evolution.md) - **四层** Adaptive Role Evolution（Global/Project/Task-Type/History）
+- [docs/runtime/agent-philosophy-matrix.md](docs/runtime/agent-philosophy-matrix.md) - 5 个 CLI 详细拆解
+- [docs/runtime/event-protocol.md](docs/runtime/event-protocol.md) - **统一事件协议（40+ 事件类型）**
+- [docs/runtime/task-state-machine.md](docs/runtime/task-state-machine.md) - **Task 状态机 + Policy Engine**
+- [docs/runtime/web-ui-architecture.md](docs/runtime/web-ui-architecture.md) - **Mission Control UI 架构**
+- [docs/runtime/control-modes.md](docs/runtime/control-modes.md) - **三级控制模式**
 
-### API 端点
+### 协议与调研
 
-| 模块 | 主要接口 |
-|------|----------|
-| Mission | `/api/missions` - 任务 CRUD、启动、暂停、克隆 |
-| Agent | `/api/agents` - Agent 管理、进化、执行 |
-| Template | `/api/templates` - 团队模板管理 |
-| LLM | `/api/llm` - LLM 状态、测试、聊天 |
-| Usage | `/api/usage` - 使用统计 |
+- [docs/adapters/spec.md](docs/adapters/spec.md) - Agent Adapter 协议
+- [docs/research/agent-cli-orchestration-landscape.md](docs/research/agent-cli-orchestration-landscape.md) - 市场调研
+- [docs/research/orca-competitive-analysis.md](docs/research/orca-competitive-analysis.md) - **Orca 竞品深度分析**
 
-### WebSocket 事件
+### 开发指南
 
-连接 `ws://localhost:8080/ws`，订阅：
-- `/topic/events` - 全局事件
-- `/topic/missions/{id}` - 任务事件
+- [docs/development/README.md](docs/development/README.md) - **开发文档总入口**
+- [docs/development/environment-setup.md](docs/development/environment-setup.md) - 环境搭建
+- [docs/development/w2-plugin-runtime.md](docs/development/w2-plugin-runtime.md) - W2 Plugin Runtime 实现
+- [docs/development/w2-capability-registry.md](docs/development/w2-capability-registry.md) - W2 能力注册表
+- [docs/development/w2-schema-migration.md](docs/development/w2-schema-migration.md) - W2 数据库迁移
+- [docs/development/w3-claude-plugin.md](docs/development/w3-claude-plugin.md) - W3 Claude Code Plugin
+- [docs/development/w3-codex-plugin.md](docs/development/w3-codex-plugin.md) - W3 Codex Plugin
+- [docs/development/w3-verifier-plugins.md](docs/development/w3-verifier-plugins.md) - W3 Verifier Plugins
+- [docs/development/w4-role-evolution.md](docs/development/w4-role-evolution.md) - W4 自适应闭环
+- [docs/development/testing-guide.md](docs/development/testing-guide.md) - 测试策略
 
-事件类型：`mission_started`, `agent_spawned`, `node_update`, `log`, `evolution_triggered` 等
+### 演进历史
 
-## 📄 页面说明
+- [docs/RFC-001-cli-orchestration.md](docs/RFC-001-cli-orchestration.md) - v1 定位 RFC
+- [docs/teammind-remediation-plan.md](docs/teammind-remediation-plan.md) - 修复计划档案
 
-| 页面 | 路径 | 功能 |
-|------|------|------|
-| Dashboard | `/` | 任务启动、快速模板、统计 |
-| Mission Detail | `/missions/:id` | 协作画布、实时日志、控制 |
-| History | `/history` | 任务历史、克隆、删除 |
-| Market | `/market` | Agent 浏览、安装、进化 |
-| Templates | `/templates` | 团队模板管理 |
-| Settings | `/settings` | LLM 配置、主题设置 |
+---
 
-## 🧪 测试 API
+## 如何贡献 Agent Plugin
 
-```bash
-# 测试 LLM 连接
-curl -X POST http://localhost:8080/api/llm/test
+详见 [docs/runtime/plugin-system.md](docs/runtime/plugin-system.md)
 
-# 获取 LLM 状态
-curl http://localhost:8080/api/llm/status
+1. Fork 仓库
+2. 在 `backend/src/main/resources/adapters/<id>.yaml` 定义 Plugin
+3. 实现 `Plugin` 接口（或继承 `AgentPlugin`）
+4. 添加单元测试
+5. 提 PR（附 Philosophy 与 Capability 声明）
 
-# 获取 Agent 列表
-curl http://localhost:8080/api/agents
+### 优先级 Agent Plugin
 
-# 触发 Agent 进化
-curl -X POST http://localhost:8080/api/agents/agent-1/evolve \
-  -H "Content-Type: application/json" \
-  -d '{"type": "PROMPT_OPTIMIZATION", "reason": "Improve accuracy"}'
+| CLI | Stars | 哲学 | 状态 |
+|---|---|---|---|
+| [Claude Code](https://github.com/anthropics/claude-code) | 14.1 万 | 安全 / 显式审批 | 待贡献 |
+| [Codex CLI](https://github.com/openai/codex) | 10.5 万 | 执行 / 测试闭环 | 待贡献 |
+| [OpenCode](https://github.com/opencode-ai/opencode) | 19.5 万 | 多模型 / 隐私 | 待贡献 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | 10.5 万 | 研究 / 多模态 | 待贡献 |
+| [Aider](https://github.com/Aider-AI/aider) | 4.8 万 | 快速定向编辑 | 待贡献 |
 
-# 强制进化（跳过门禁，高权限操作）
-curl -X POST http://localhost:8080/api/agents/agent-1/evolve \
-  -H "Content-Type: application/json" \
-  -d '{"type": "PROMPT_OPTIMIZATION", "reason": "Force", "context": {"force": true}}'
+---
 
-# 查看进化历史（含前后指标快照，用于效果对比）
-curl http://localhost:8080/api/agents/agent-1/evolution/history
+## 技术栈
 
-# 获取 Agent 真实执行指标（成功率/Token效率/评分）
-curl http://localhost:8080/api/agents/agent-1/metrics
-```
+| 层 | 技术 |
+|---|---|
+| Plugin Runtime | 自研 Cordis-like（生命周期 + 事件总线 + 调度） |
+| Capability Registry | 自研（按能力 + 哲学索引） |
+| Evidence Verifier | git CLI + 测试框架 + 文件系统 |
+| 后端 | Spring Boot 3.3 + SQLite (WAL) |
+| 实时 | WebSocket (STOMP) |
+| 前端 | Vue 3 + TypeScript + Naive UI + Vue Flow |
+| Agent 集成 | Java ProcessBuilder + 子进程 stdin/stdout |
 
-## 📜 License
+---
+
+## 与其他工具的边界
+
+| 工具 | 边界 |
+|---|---|
+| [CC Switch](https://github.com/farion1231/cc-switch) | CC Switch 管"今天用哪个供应商"（10 万 Stars）。TeamMind 管"这个项目应该由谁做什么"。 |
+| LangGraph / AutoGen | 那些是 Python 库，要写代码。TeamMind 是 Web 工具，配置即可。 |
+| Claude Code / Codex 各自 subagent | 单 CLI 内部已有多 Agent 能力。TeamMind 是**跨 CLI 协作层**，不抢这个赛道。 |
+
+---
+
+## License
 
 MIT
+
+---
+
+## 致谢
+
+- [CC Switch](https://github.com/farion1231/cc-switch) - CLI 统一管理先驱
+- [DeepSeek Harness / Cordis](https://github.com/deepseek-ai) - Plugin Runtime 架构哲学启发
+- [Vue Flow](https://vueflow.dev/) - 可视化画布
+- [Naive UI](https://www.naiveui.com/) - Vue 3 UI 组件库

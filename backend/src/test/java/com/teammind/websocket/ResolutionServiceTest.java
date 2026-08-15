@@ -50,9 +50,11 @@ class ResolutionServiceTest {
     void agentChangingVoteRevokesPrevious() {
         service.recordVote("res-4", "agent-a", "option-1");
         service.recordVote("res-4", "agent-b", "option-2");
-        // agent-a 改票到 option-2，此时 option-1 票数归零
-        service.recordVote("res-4", "agent-a", "option-2");
-        Map<String, Integer> votes = service.recordVote("res-4", "agent-c", "option-2");
+        // agent-a 改票到 option-2：撤销 option-1 一票（归零），option-2 增加为 2
+        Map<String, Integer> votes = service.recordVote("res-4", "agent-a", "option-2");
+        // option-1 已归零被移除
+        assertNull(votes.get("option-1"));
+        // option-2 应为 2（agent-b + agent-a 改票）
         assertEquals(2, votes.get("option-2"));
         assertEquals("option-2", service.resolveIfConsensus("res-4"));
     }

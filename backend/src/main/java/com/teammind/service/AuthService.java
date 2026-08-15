@@ -69,8 +69,8 @@ public class AuthService {
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
-                .roles(user.getRoles())
-                .permissions(user.getPermissions())
+                .roles(user.getRoles() != null ? user.getRoles() : List.of())
+                .permissions(user.getPermissions() != null ? user.getPermissions() : List.of())
                 .expiresIn(86400L)
                 .build();
     }

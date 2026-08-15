@@ -21,6 +21,9 @@ import org.springframework.util.StreamUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -44,9 +47,21 @@ public class DataInitializer implements CommandLineRunner {
     @Value("${teammind.evolution.enabled:true}")
     private boolean evolutionEnabled;
 
+    @Value("${teammind.data-path:${user.home}/.teammind}")
+    private String dataPath;
+
+    @Value("${teammind.agents-path:${teammind.data-path}/agents}")
+    private String agentsPath;
+
+    @Value("${teammind.templates-path:${teammind.data-path}/templates}")
+    private String templatesPath;
+
     @Override
     public void run(String... args) throws Exception {
         log.info("Initializing TeamMind data...");
+
+        // ✅ 在连接 SQLite 之前先确保数据目录存在，否则首次运行会因为 .teammind 目录缺失而启动失败。
+        ensureDataDirectories();
 
         // 初始化数据库表结构
         initDatabaseSchema();
@@ -61,6 +76,29 @@ public class DataInitializer implements CommandLineRunner {
         initDefaultUser();
 
         log.info("TeamMind data initialization completed.");
+    }
+
+    /**
+     * 确保数据目录存在（首次启动时由本方法创建）。
+     * 同时创建 agents/templates 子目录，用于后续保存 Markdown 配置。
+     */
+    private void ensureDataDirectories() throws IOException {
+        Path dataDir = Paths.get(dataPath);
+        Path agentsDir = Paths.get(agentsPath);
+        Path templatesDir = Paths.get(templatesPath);
+
+        if (!Files.exists(dataDir)) {
+            Files.createDirectories(dataDir);
+            log.info("Created data directory: {}", dataDir.toAbsolutePath());
+        }
+        if (!Files.exists(agentsDir)) {
+            Files.createDirectories(agentsDir);
+            log.info("Created agents directory: {}", agentsDir.toAbsolutePath());
+        }
+        if (!Files.exists(templatesDir)) {
+            Files.createDirectories(templatesDir);
+            log.info("Created templates directory: {}", templatesDir.toAbsolutePath());
+        }
     }
 
     /**

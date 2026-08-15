@@ -101,19 +101,21 @@ class JwtUtilTest {
     @Test
     @DisplayName("过期的 token 应解析为 null")
     void parseToken_expired_rejected() throws InterruptedException {
-        // 1 秒过期的 token
-        JwtUtil shortLived = new JwtUtil("test-secret-key-for-jwt-unit-test", 1);
-        String token = shortLived.generateToken("u-1", "admin", List.of(), List.of());
+        // 使用 0 秒过期：token 一旦签发立即过期
+        JwtUtil zeroExpiration = new JwtUtil("test-secret-key-for-jwt-unit-test", 0);
+        String token = zeroExpiration.generateToken("u-1", "admin", List.of(), List.of());
 
+        // 等待跨秒边界，确保 exp < now
         Thread.sleep(1100);
-        assertNull(shortLived.parseToken(token));
+        assertNull(zeroExpiration.parseToken(token));
     }
 
     @Test
     @DisplayName("同一用户不同时刻签发的 token 应不同（含 iat）")
     void generateToken_isNotDeterministic() throws InterruptedException {
         String t1 = jwtUtil.generateToken("u-1", "admin", List.of(), List.of());
-        Thread.sleep(20);
+        // 等待跨秒边界，确保 iat 不同
+        Thread.sleep(1100);
         String t2 = jwtUtil.generateToken("u-1", "admin", List.of(), List.of());
         assertNotEquals(t1, t2);
     }

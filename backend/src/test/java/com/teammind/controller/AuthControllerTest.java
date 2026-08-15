@@ -69,8 +69,8 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                // LoginRequest 有 @NotBlank，但 standalone 不加载校验器，这里仅验证路由可达
-                .andExpect(status().is5xxServerError());
+                // LoginRequest 有 @NotBlank，@Valid 校验失败应返回 400 CLIENT_ERROR
+                .andExpect(status().isBadRequest());
     }
 
     @Test
