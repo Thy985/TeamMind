@@ -35,3 +35,6 @@ backend/target
 backend/.env
 backend/.env.*
 !backend/.env.example
+
+# WorkBuddy 本地工作记忆
+.workbuddy
