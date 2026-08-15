@@ -29,6 +29,9 @@ public class TaskExecution {
     @Column(nullable = false)
     private String projectId;
 
+    /** FK → Task.id (Phase 1A: 关联到 Task 以支持多 Execution per Task) */
+    private String taskId;
+
     @Column(columnDefinition = "TEXT")
     private String objective;
 
@@ -38,6 +41,31 @@ public class TaskExecution {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private com.teammind.common.TaskState state;
+
+    /**
+     * 细粒度内部执行状态（Phase 1A Runtime Contract）
+     * 支持 Pause / NeedsApproval / Recovering 等中间态
+     * nullable=true：兼容旧代码路径（老测试/legacy 代码不设置此字段）
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "execution_state")
+    private com.teammind.common.TaskExecutionState executionState;
+
+    /** Pipeline 步骤级别的状态 */
+    @Column(length = 64)
+    private String currentStepName;
+
+    /** 当前负责的 Agent（与 currentAgentId 保持一致，新增字段） */
+    @Column(length = 64)
+    private String agentId;
+
+    /** 失败原因（FINALIZED state 时有值） */
+    @Column(length = 500)
+    private String errorReason;
+
+    /** 重试次数（与 Task 同步，Execution 维度的独立计数） */
+    @Builder.Default
+    private Integer attemptNumber = 1;
 
     /** 当前负责的 Agent */
     private String currentAgentId;

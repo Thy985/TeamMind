@@ -11,5 +11,7 @@ public enum EvidenceType {
     /** 文件存在验证：某个文件是否存在 */
     FILE_EXISTENCE,
     /** 命令退出码验证：命令是否以 0 退出 */
-    COMMAND_EXIT
+    COMMAND_EXIT,
+    /** 审查发现：Claude Code review 产出的 findings */
+    REVIEW_FINDINGS
 }
