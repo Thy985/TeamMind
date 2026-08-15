@@ -10,7 +10,8 @@ import {
   SettingsOutline,
   MoonOutline,
   SunnyOutline,
-  MenuOutline
+  MenuOutline,
+  AnalyticsOutline
 } from '@vicons/ionicons5'
 import { useUIStore } from '@/stores'
 
@@ -23,6 +24,11 @@ const menuOptions = [
     label: 'Dashboard',
     key: 'dashboard',
     icon: () => h(NIcon, null, { default: () => h(HomeOutline) })
+  },
+  {
+    label: 'Mission Control',
+    key: 'mission-control',
+    icon: () => h(NIcon, null, { default: () => h(AnalyticsOutline) })
   },
   {
     label: 'History',

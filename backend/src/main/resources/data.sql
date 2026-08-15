@@ -24,3 +24,29 @@ VALUES
     ('mission-1', 'Code review for auth module', 'Review authentication module for security issues', 'COMPLETED', datetime('now', '-2 hours'), datetime('now', '-1 hour'), '[]', '[]', '[]'),
     ('mission-2', 'Analyze user engagement data', 'Process and analyze user engagement metrics', 'RUNNING', datetime('now', '-5 hours'), datetime('now'), '[]', '[]', '[]'),
     ('mission-3', 'Generate API documentation', 'Create comprehensive API documentation', 'COMPLETED', datetime('now', '-1 day'), datetime('now', '-1 day'), '[]', '[]', '[]');
+
+-- ============================================================
+-- V2: Default Plugins
+-- ============================================================
+
+INSERT OR IGNORE INTO plugins (id, name, vendor, description, version, plugin_type,
+    capabilities, philosophies, preferred_roles, weak_roles,
+    avg_latency_ms, reliability_score, cost_per_invocation, enabled, health_status, installed_at)
+VALUES
+    ('claude-code', 'Claude Code', 'Anthropic',
+     '安全导向的 AI 编程助手，强调权限边界和显式审批',
+     '2.1.215', 'AGENT',
+     '["implementation","code_review","security_review","architecture_design","documentation"]',
+     '["safety","controlled_action","explicit_permission","cautious_execution"]',
+     '["security_review","code_review","architecture_review"]',
+     '["bulk_refactor","rapid_iteration"]',
+     45000, 0.92, 0.05, 1, 'HEALTHY', datetime('now')),
+
+    ('codex', 'Codex CLI', 'OpenAI',
+     '执行导向的 AI 编程助手，强调迭代构建和测试闭环',
+     '0.144.5', 'AGENT',
+     '["implementation","test_generation","refactoring","api_design"]',
+     '["execution","iterative_build","test_driven","rapid_iteration"]',
+     '["implementation","test_generation","refactoring"]',
+     '["security_review","architecture_review"]',
+     30000, 0.90, 0.03, 1, 'HEALTHY', datetime('now'));

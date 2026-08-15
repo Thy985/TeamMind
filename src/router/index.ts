@@ -38,6 +38,15 @@ const routes: RouteRecordRaw[] = [
     ]
   },
   {
+    path: '/mission-control/:projectId',
+    name: 'mission-control',
+    component: () => import('@/pages/MissionControlPage.vue'),
+    meta: {
+      title: 'Mission Control',
+      description: '实时监控项目执行状态、性能趋势和推荐配置'
+    }
+  },
+  {
     path: '/history',
     name: 'history',
     component: () => import('@/pages/HistoryPage.vue'),

@@ -1,0 +1,20 @@
+{
+  "project": "D:\\Projects\\Active\\TeamMind\\backend",
+  "language_primary": "unknown",
+  "framework": "unknown",
+  "package_files": [],
+  "entry_points": [],
+  "existing_agent_config": [],
+  "harness": "unknown",
+  "blast_radius_score": "low",
+  "production_repo": "yes",
+  "irreversible_resources": [],
+  "ci_surface": "none",
+  "ci_workflows": [],
+  "pre_push_hook": "no",
+  "doc_files": [],
+  "adr_count": 0,
+  "adr_latest": null,
+  "phase_contracts": 0,
+  "verification_reports": 0
+}

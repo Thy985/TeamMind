@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teammind.entity.Agent;
 import com.teammind.entity.Agent.AgentStatus;
+import com.teammind.entity.Plugin;
 import com.teammind.entity.TeamTemplate;
 import com.teammind.entity.User;
 import com.teammind.repository.AgentRepository;
+import com.teammind.repository.PluginRepository;
 import com.teammind.repository.TeamTemplateRepository;
 import com.teammind.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,7 @@ public class DataInitializer implements CommandLineRunner {
 
     private final AgentRepository agentRepository;
     private final TeamTemplateRepository templateRepository;
+    private final PluginRepository pluginRepository;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
@@ -68,6 +71,9 @@ public class DataInitializer implements CommandLineRunner {
 
         // 初始化默认 Agent
         initDefaultAgents();
+
+        // 初始化默认 Plugin（v2）
+        initDefaultPlugins();
 
         // 初始化默认模板
         initDefaultTemplates();
@@ -236,5 +242,63 @@ public class DataInitializer implements CommandLineRunner {
 
         userRepository.save(admin);
         log.info("Created default admin user (password stored as BCrypt hash).");
+    }
+
+    /**
+     * 初始化默认 Plugin（v2 Runtime）
+     */
+    private void initDefaultPlugins() {
+        if (pluginRepository.count() > 0) {
+            log.info("Plugins already exist, skipping initialization.");
+            return;
+        }
+
+        log.info("Creating default plugins...");
+
+        List<Plugin> defaultPlugins = List.of(
+                Plugin.builder()
+                        .id("claude-code")
+                        .name("Claude Code")
+                        .vendor("Anthropic")
+                        .description("安全导向的 AI 编程助手，强调权限边界和显式审批")
+                        .version("2.1.215")
+                        .pluginType(Plugin.PluginType.AGENT)
+                        .capabilities(List.of("implementation","code_review","security_review","architecture_design","documentation"))
+                        .philosophies(List.of("safety","controlled_action","explicit_permission","cautious_execution"))
+                        .preferredRoles(List.of("security_review","code_review","architecture_review"))
+                        .weakRoles(List.of("bulk_refactor","rapid_iteration"))
+                        .avgLatencyMs(45000L)
+                        .reliabilityScore(0.92)
+                        .costPerInvocation(0.05)
+                        .enabled(true)
+                        .healthStatus(Plugin.HealthStatus.HEALTHY)
+                        .installedAt(LocalDateTime.now())
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build(),
+                Plugin.builder()
+                        .id("codex")
+                        .name("Codex CLI")
+                        .vendor("OpenAI")
+                        .description("执行导向的 AI 编程助手，强调迭代构建和测试闭环")
+                        .version("0.144.5")
+                        .pluginType(Plugin.PluginType.AGENT)
+                        .capabilities(List.of("implementation","test_generation","refactoring","api_design"))
+                        .philosophies(List.of("execution","iterative_build","test_driven","rapid_iteration"))
+                        .preferredRoles(List.of("implementation","test_generation","refactoring"))
+                        .weakRoles(List.of("security_review","architecture_review"))
+                        .avgLatencyMs(30000L)
+                        .reliabilityScore(0.90)
+                        .costPerInvocation(0.03)
+                        .enabled(true)
+                        .healthStatus(Plugin.HealthStatus.HEALTHY)
+                        .installedAt(LocalDateTime.now())
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build()
+        );
+
+        pluginRepository.saveAll(defaultPlugins);
+        log.info("Created {} default plugins.", defaultPlugins.size());
     }
 }

@@ -193,34 +193,20 @@ frontend/
 
 ## 实施路线（开发视角）
 
-### Phase 1：核心骨架（W2）
+### Phase 1：核心骨架（W2）✅ 完成
+### Phase 2：第一个 Plugin（W3）✅ 完成
+### Phase 3：自适应闭环（W4）✅ 完成
+### Phase 4：真实 E2E 验证（本阶段）✅ 完成
+### Phase 5：Product Alpha（W7）🔄 进行中
 
-| 任务 | 文档 | 工作量 |
-|---|---|---|
-| Plugin Runtime 框架 | [w2-plugin-runtime.md](w2-plugin-runtime.md) | 2 天 |
-| Capability Registry | [w2-capability-registry.md](w2-capability-registry.md) | 1.5 天 |
-| SQLite schema 升级 | [w2-schema-migration.md](w2-schema-migration.md) | 1 天 |
-| Repository + Service 基础 | （见各文档） | 1 天 |
-
-### Phase 2：第一个 Plugin（W3）
-
-| 任务 | 文档 | 工作量 |
-|---|---|---|
-| Claude Code Plugin | [w3-claude-plugin.md](w3-claude-plugin.md) | 2 天 |
-| Codex Plugin | [w3-codex-plugin.md](w3-codex-plugin.md) | 1.5 天 |
-| Verifier Plugins | [w3-verifier-plugins.md](w3-verifier-plugins.md) | 1 天 |
-
-### Phase 3：自适应（W4）
-
-| 任务 | 文档 | 工作量 |
-|---|---|---|
-| Performance Tracker | [w4-role-evolution.md](w4-role-evolution.md) | 1.5 天 |
-| Drift Detector | [w4-role-evolution.md](w4-role-evolution.md) | 1 天 |
-| Team Recommender | [w4-role-evolution.md](w4-role-evolution.md) | 1 天 |
-
-### Phase 4：发布（W5）
-
-- 录视频、写 README、GitHub Release v0.1
+| # | 任务 | 文档 | 状态 |
+|---|---|---|---|
+| W7.1A | Runtime Contract（数据模型 + 状态机 + Handoff Protocol） | [w7-product-alpha.md](w7-product-alpha.md) | 🔄 进行中 |
+| W7.1B | Single-Agent Runtime（TaskExecution + PipelineOrchestrator + HumanControl + Recovery） | 同上 | ⏳ 待开始 |
+| W7.1C | Multi-Agent Handoff（review-loop Pipeline + Evidence 生命周期） | 同上 | ⏳ 待开始 |
+| W7.2 | Mission Control Web UI（窄切口：TaskDetail + WebSocket 状态投影） | 同上 | ⏳ 待开始 |
+| W7.3 | Persistent Event Store + Worktree 隔离 + Recovery | 同上 | ⏳ 待开始 |
+| W7.4 | 打磨 + README + Demo 视频 + Release v0.2 | — | ⏳ 待开始 |
 
 ---
 
@@ -369,6 +355,6 @@ com.teammind.websocket.*    // WebSocket
 
 ---
 
-**最后更新**：2026-08-14
-**版本**：v0.1
-**状态**：伴随 W2-W4 实现逐步完善
+**最后更新**：2026-08-15
+**版本**：v0.2（Product Alpha 阶段）
+**状态**：W7 Product Alpha 进行中

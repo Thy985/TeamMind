@@ -236,6 +236,29 @@ export const templateApi = {
   clone: (id: string) => api.post<{ id: string }>(`/templates/${id}/clone`)
 }
 
+// ==================== Mission Control API ====================
+export const missionControlApi = {
+  overview: (projectId: string) => api.get(`/mission-control/project/${projectId}/overview`),
+
+  runningTasks: (projectId: string) => api.get(`/mission-control/project/${projectId}/running`),
+
+  history: (projectId: string, limit = 20) =>
+    api.get(`/mission-control/project/${projectId}/history?limit=${limit}`),
+
+  profile: (projectId: string) => api.get(`/mission-control/project/${projectId}/profile`),
+
+  recommendation: (projectId: string) => api.get(`/mission-control/project/${projectId}/recommendation`),
+
+  driftAlerts: (projectId: string) => api.get(`/mission-control/project/${projectId}/drift`),
+
+  recalculate: (projectId: string) => api.post(`/mission-control/project/${projectId}/recalculate`),
+
+  controlMode: (projectId: string) => api.get(`/mission-control/project/${projectId}/control-mode`),
+
+  setControlMode: (projectId: string, mode: string) =>
+    api.put(`/mission-control/project/${projectId}/control-mode`, { controlMode: mode })
+}
+
 // ==================== Auth API ====================
 export const authApi = {
   login: (data: { username: string; password: string }) => api.post('/auth/login', data, { retryable: false }),

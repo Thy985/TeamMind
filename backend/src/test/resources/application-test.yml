@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: jdbc:sqlite::memory:?busy_timeout=30000&journal_mode=WAL&synchronous=FULL&foreign_keys=ON&locking_mode=NORMAL
+    driver-class-name: org.sqlite.JDBC
+    username: sa
+    password: ""
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  sql:
+    init:
+      mode: never
+  security:
+    enabled: false
+
+teammind:
+  data-path: /tmp/teammind-test
+  plugins:
+    use-database: false
+  security:
+    jwt-secret: test-jwt-secret-key-that-is-at-least-32-characters-long!!
+    jwt-expiration-seconds: 86400
+
+server:
+  port: 0
+  main:
+    allow-bean-definition-overriding: true
+
+logging:
+  level:
+    com.teammind: DEBUG
+    root: WARN
