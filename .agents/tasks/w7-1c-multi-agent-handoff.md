@@ -1,0 +1,274 @@
+# W7 Phase 1C: Multi-Agent Handoff + Agent Readiness
+
+## Goal
+
+在 Phase 1B 单 Agent 闭环的基础上，构建多 Agent 协作 Runtime，并引入 Agent Readiness 作为一等公民的基础设施。
+
+**核心原则：Agent Readiness 先于 Multi-Agent。**
+一个不能保证自身可用的 Agent，无法可靠地参与协作。
+
+---
+
+## Phase 1C-1: Agent Readiness（横切基础设施）
+
+> **Codex 无法启动的根因不是 bug，而是 Runtime 缺少"Agent 可用性"的一等抽象。**
+>
+> TeamMind 依赖的是一条运行链：
+> ```
+> TeamMind → Codex Plugin → Codex CLI → HTTP Provider → 本机 Codex++ 推理服务
+> ```
+> 只检查 `codex --version` 不够，必须检查整条链的可用性。
+
+### 1.1 ReadinessState 七态机
+
+```
+DISCOVERED → INSTALLED → CONFIGURED → READY → DEGRADED → RECOVERING → BLOCKED / UNAVAILABLE
+```
+
+| 状态 | 含义 | 触发条件 |
+|------|------|---------|
+| DISCOVERED | Plugin 被扫描到，未加载 | Startup |
+| INSTALLED | 二进制/依赖存在，未验证配置 | After discovery |
+| CONFIGURED | 配置文件有效，依赖服务未就绪 | After install check |
+| READY | 所有依赖可用，可被调度 | All checks pass |
+| DEGRADED | 部分能力降级（如响应慢） | Health probe warns |
+| RECOVERING | 系统正在尝试自动恢复 | Dependency failed |
+| BLOCKED | 无法自动恢复，需用户介入 | Recovery timeout |
+| UNAVAILABLE | 完全不可用 | Any fatal error |
+
+### 1.2 Dependency Graph（声明式）
+
+每个 Plugin 自描述依赖，Runtime 统一执行检查和恢复：
+
+```yaml
+agent: codex
+dependencies:
+  - type: executable
+    name: codex
+    check: "codex --version"
+    min_version: "0.144.5"
+
+  - type: service
+    name: local-provider
+    endpoint: http://127.0.0.1:57321
+    health_check:
+      method: GET
+      path: /v1/models
+      expected_status: 200
+    recovery:
+      - action: launch_process
+        process: "D:\\ProgramFiles\\Codex++\\codex-plus-plus.exe"
+        args: ["--minimized"]
+        wait_for:
+          type: http_endpoint
+          url: http://127.0.0.1:57321/v1/models
+          timeout_ms: 30000
+
+  - type: auth
+    name: codex-auth
+    check: "test -f ~/.codex/config.toml"
+```
+
+### 1.3 RecoveryStrategy 枚举
+
+```java
+enum RecoveryAction {
+    SAFE,         // 仅检查，无副作用
+    DANGEROUS,    // 启动进程/安装依赖，需要 Permission Policy 审批
+    IRREVERSIBLE  // 不可逆操作，必须人工确认
+}
+```
+
+### 1.4 ReadinessManager 接口
+
+```java
+@Component
+public class ReadinessManager {
+    /** 检查单个 Plugin 的当前就绪状态 */
+    public ReadinessResult check(String pluginId) { ... }
+
+    /** 尝试自动恢复不可用的 Plugin */
+    public boolean attemptRecovery(String pluginId) { ... }
+
+    /** 批量检查所有 Plugin（启动时调用） */
+    public Map<String, ReadinessResult> checkAll() { ... }
+
+    /** 获取所有 READY 的 Plugin（Capability Router 前置过滤） */
+    public List<Plugin> getRunnableAgents(String projectId) { ... }
+}
+```
+
+### 1.5 Readiness 作为 Capability Routing 的前置开关
+
+**关键原则：Readiness 是开关，不是乘数。**
+
+```java
+public List<Plugin> getRunnableCandidates(PluginCapability capability, String projectId) {
+    return pluginManager.getAll()
+        .filter(p -> p.getReadiness(projectId).isRunnable())  // 前置过滤
+        .sorted(Comparator.comparingInt(
+            p -> routingScore(p, capability, projectId)));       // 再评分
+}
+```
+
+### 1.6 RealE2E 测试
+
+```
+test_codexProviderStopped_thenAutoRecovered()
+  1. 启动 TeamMind
+  2. 停止 Codex++ 进程（模拟 provider 不可用）
+  3. 提交 Task
+  4. 验证：ReadinessState → RECOVERING → READY
+  5. 验证：Codex++ 被自动启动
+  6. 验证：Task 正常执行完成
+
+test_codexProviderUnrecoverable_thenBlocked()
+  1. 停止 Codex++ 进程
+  2. 修改 config.toml 指向无效 endpoint
+  3. 提交 Task
+  4. 验证：ReadinessState → BLOCKED
+  5. 验证：Mission Control 显示用户介入提示
+```
+
+---
+
+## Phase 1C-2: Multi-Agent Pipeline（review-loop）
+
+### 2.1 YAML Pipeline 定义
+
+```yaml
+# pipelines/review-loop.yaml
+name: "review-loop"
+steps:
+  - name: implement
+    role: LEAD
+    agent: codex
+    prompt: |
+      任务：{{objective}}
+      约束：{{constraints}}
+      完成后输出文件变更列表。
+    output: CODE_DIFF
+    handoff: review
+
+  - name: review
+    role: REVIEWER
+    agent: claude-code
+    prompt: |
+      请审查以下实现：
+      任务目标：{{objective}}
+      变更文件：{{artifacts.implement.files}}
+      变更摘要：{{artifacts.implement.summary}}
+      关注点：安全、架构一致性、测试覆盖
+    output: REVIEW_FINDINGS
+    on_critical: request_approval
+    on_success: verify
+    handoff: verify
+
+  - name: verify
+    role: VERIFIER
+    agents: [git-verifier, test-runner-verifier]
+    output: EVIDENCE
+    on_all_pass: done
+    on_any_fail: review
+```
+
+### 2.2 HandoffContext
+
+```java
+record HandoffContext(
+    String fromAgent;
+    String toAgent;
+    String objective;
+    String currentStage;
+    List<Artifact> artifacts;
+    List<String> relevantEvents;
+    String repoState;           // git status 摘要
+    String workingTreeSnapshot;
+    List<Finding> openFindings;
+    List<String> constraints;
+    String previousOutputSummary;
+)
+```
+
+---
+
+## Phase 1C-3: Persistent Event Store
+
+### 3.1 Event 分级存储
+
+| 级别 | 事件类型 | 存储 | 保留时间 |
+|------|---------|------|---------|
+| 热 | TASK_STARTED, TASK_COMPLETED, EVIDENCE_VERIFIED, APPROVAL_* | SQLite | 永久 |
+| 温 | ARTIFACT_CREATED, FINDING_CREATED | SQLite | 7 天 |
+| 冷 | AGENT_CHUNK, TOOL_CALLED | 文件系统（日志轮转） | 30 天 |
+
+### 3.2 Event Replay
+
+```
+GET /tasks/{id}/events?after=N   → 从 N 之后的所有事件
+WebSocket reconnect             → 发 snapshotVersion=N 之后的快照
+```
+
+---
+
+## Phase 1C-4: Mission Control — TaskDetail（窄切口）
+
+### 4.1 TaskDetail 必须回答的 6 个问题
+
+1. 现在谁在干什么？ → Agent 卡片 + 当前步骤
+2. 为什么轮到它？ → 路由决策记录（Capability + Score + Readiness）
+3. 改了什么？ → Artifact 列表（文件变更）
+4. 验证了吗？ → Evidence 面板（verified / pending）
+5. 哪里失败了？ → Finding 列表（severity + description）
+6. 我需要介入吗？ → ControlButtons（如果 NEEDS_APPROVAL）
+
+### 4.2 Readiness 展示
+
+```text
+Codex
+● READY
+  v0.144.5 | provider: 127.0.0.1:57321 | config: OK
+
+Claude Code
+● DEGRADED
+  provider timeout: 850ms (normal: 200ms)
+  [Auto-recovering...]
+```
+
+---
+
+## 验收标准
+
+```
+[ ] Agent Readiness: Codex provider 停止 → TeamMind 检测到 → 自动恢复 → 调用成功
+[ ] Agent Readiness: 无法恢复 → 状态变为 BLOCKED → Mission Control 提示用户
+[ ] Agent Readiness: Readiness 作为 Capability Router 前置过滤（DEGRADED 降权，UNAVAILABLE 排除）
+[ ] Codex 实现 → Claude 审查 → Verifier 验证 → DONE
+[ ] Claude 发现 CRITICAL → NEEDS_APPROVAL → 用户批准 → 继续
+[ ] Claude 发现 HIGH → 返回 Codex 修复 → 重新审查
+[ ] Verifier 失败 → 返回 Claude 重新审查
+[ ] 所有中间状态可暂停、可恢复
+[ ] 完整事件链持久化
+[ ] PerformanceRecord 正确写入（Codex + Claude 各一条）
+[ ] Event replay 断线重连后状态一致
+[ ] Mission Control TaskDetail 页面显示 Readiness 状态
+[ ] 全量测试通过（无回归）
+```
+
+---
+
+## 执行计划
+
+| # | 任务 | 负责人 | 工作量 |
+|---|------|--------|--------|
+| 1C-1 | Agent Readiness 子系统 | Codex | 2 天 |
+| 1C-2 | Multi-Agent Pipeline | Codex | 1.5 天 |
+| 1C-3 | Persistent Event Store | Codex | 1 天 |
+| 1C-4 | Mission Control TaskDetail | Claude Code（review） | 1 天 |
+| 1C-5 | E2E 测试 + 联调 | Codex + Claude | 1 天 |
+
+---
+
+**创建时间**: 2026-08-16
+**关联文档**: [w7-product-alpha.md](../../docs/development/w7-product-alpha.md)
+**前置条件**: Phase 1A + 1B 已完成（commit 7db54c0f）

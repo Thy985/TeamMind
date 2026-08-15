@@ -1,4 +1,4 @@
-# W7: Product Alpha — Runtime Core + Mission Control
+﻿# W7: Product Alpha — Runtime Core + Mission Control
 
 > **目标：把 TeamMind 从"零件集合"变成一个可真实使用的 Project AI Team Control Plane。**
 >
@@ -414,6 +414,105 @@ public class RecoveryService implements CommandLineRunner {
 
 ---
 
+### 2.6 Storage Architecture Principles
+
+> **SQLite 是 TeamMind 的 Runtime State Store，不是唯一存储层。**
+>
+> 核心原则："Markdown/YAML 是项目记忆和配置，SQLite 是运行时事实。"
+
+#### 四类存储及其职责
+
+\\\	ext
+                    TeamMind Storage
+                           │
+         ┌─────────────────┼─────────────────┐
+         ↓                 ↓                 ↓
+   Human/AI readable   Runtime            Artifact
+         │                 │                 │
+    Markdown / YAML     SQLite          Git / Filesystem
+\\\
+
+| 数据类别 | 存储位置 | 理由 |
+|---------|---------|------|
+| Project description | \project.md\ | 人类 + Agent 可读可编辑 |
+| Team configuration | \	eam.yaml\ | git diff 可追溯，Agent 可解析 |
+| Policies | \policy.yaml\ | 决策可审计，可直接 git diff |
+| ADR / decisions | \.teammind/decisions/ADR-*.md\ | 长期记忆，支持 grep + review |
+| Lessons / routing | \.teammind/memory/routing.md\ | Agent 直接读取的知识库 |
+| Task brief | \.teammind/tasks/T-*.md\ | 人类可读的任务上下文 |
+| Execution state | SQLite (\	ask_executions\) | 高频变化，需要事务一致性 |
+| Approval state | SQLite (\pproval_requests\) | 状态机驱动，需原子更新 |
+| Event index | SQLite (\untime_events\) | 有序可查询，支持 replay |
+| Performance metrics | SQLite (\performance_records\) | 聚合查询，索引依赖 |
+| Git diff | Git (直接) | 不可变，版本控制原生 |
+| Agent raw output | Filesystem (\.teammind/artifacts/\) | 结构化内容，按需加载 |
+| Large artifacts | Filesystem / Git | 避免 SQLite TEXT 列膨胀 |
+
+#### \.teammind/\ 目录结构
+
+\\\	ext
+project/
+├── .teammind/
+│   ├── team.yaml                  ← 团队配置（角色→Agent绑定）
+│   ├── policy.yaml                ← 项目治理规则
+│   ├── project.md                 ← 项目描述（Architecture, ADRs, rules）
+│   │
+│   ├── decisions/                 ← 长期决策记录
+│   │   ├── ADR-001.md
+│   │   └── ADR-002.md
+│   │
+│   ├── memory/                    ← Agent 可读知识库
+│   │   ├── lessons.md             ← 通用经验
+│   │   └── routing.md             ← "这个类型任务适合用什么 Agent"
+│   │
+│   ├── tasks/                     ← 任务草稿/brief
+│   │   ├── T-001.md
+│   │   └── T-002.md
+│   │
+│   ├── artifacts/                 ← Agent 产出（按 task 组织）
+│   │   ├── T-001/
+│   │   │   ├── diff.patch         ← 代码变更
+│   │   │   ├── review.json        ← 审查结果（机器协议）
+│   │   │   └── test-report.json   ← 测试报告
+│   │   └── ...
+│   │
+│   └── runtime.db                 ← SQLite：仅运行时状态
+│
+├── src/
+├── tests/
+└── ...
+\\\
+
+#### 分层理由
+
+**Markdown/YAML 的优势（SQLite 没有）：**
+- \git diff .teammind/\ 可追溯团队配置、决策演进
+- Agent 和人类都能直接阅读、grep、编辑
+- 无需 ORM 映射，天然版本控制
+- 推荐文件（如 routing.md）直接服务于 Capability Routing
+
+**SQLite 的适用场景（Markdown 不适合）：**
+- 高频写（每次 tool call 都产生事件）
+- 事务一致性（证据验证 + 状态转移必须原子）
+- 复杂查询（"过去30天 Codex 在 implementation 角色的成功率"）
+- 有序事件（event replay 依赖 id 排序）
+
+**分层设计让两者互补，而非互斥。**
+
+#### Storage Provider 接口（Phase 1C 引入）
+
+\\\java
+public interface StorageProvider {
+    StateStore state();         // SQLite — 事务性运行时状态
+    KnowledgeStore knowledge(); // Markdown/YAML — 项目记忆和配置
+    ArtifactStore artifacts();  // 混合 — 元数据 SQLite，大文件 FS/Git
+    ConfigStore config();       // YAML/JSON — 团队配置和 Policy
+}
+\\\
+
+**Phase 1A/1B 阶段**：只实现 \StateStore\（SQLite），KnowledgeStore 留接口不实现。
+**Phase 1C**：开始引入 KnowledgeStore，将 routing.md、lessons.md 写入文件系统。
+
 ## 三、Phase 1B：Single-Agent Runtime（先做好一条链）
 
 > **不急着做 Codex → Claude → Verifier，先把 Codex 一条链做到可靠。**
@@ -714,7 +813,8 @@ Week 1:  Phase 1A（Runtime Contract）
          - 状态机文档
          - HandoffProtocol 定义
          - Recovery 模型设计
-         → 产出：docs/w7-runtime-contract.md
+          - Storage Architecture Principles（定义边界，不实现）
+          → 产出：docs/w7-runtime-contract.md
 
 Week 2:  Phase 1B（Single-Agent Runtime）
          - TaskExecution + ExecutionStep + AgentInvocation 实体 + Repository
@@ -724,15 +824,21 @@ Week 2:  Phase 1B（Single-Agent Runtime）
          - 单元测试 + 集成测试
          → 产出：backend 代码 + 测试
 
-Week 3:  Phase 1C + Event + WS
-         - Multi-Agent Pipeline（review-loop）
-         - Evidence 模型升级（sealed interface + 生命周期）
-         - Persistent Event Store
-         - TaskEventBridge（带 replay 支持）
-         - RealMultiAgentE2E 测试
-         → 产出：完整 runtime + E2E
+Week 3:  Phase 1C（Multi-Agent + Agent Readiness）
+          - [1C-1] Agent Readiness 子系统（横切基础设施，第一优先）
+            * ReadinessState 七态机（DISCOVERED→BLOCKED）
+            * ReadinessManager（扫描 + 状态机 + 恢复）
+            * Dependency Graph（声明式依赖，每个 Plugin 自描述）
+            * RecoveryStrategy（SAFE / DANGEROUS / IRREVERSIBLE）
+            * Readiness 作为 Capability Router 前置过滤开关
+            * RealE2E: provider 停止 → 自动恢复 → 调用成功
+          - [1C-2] Multi-Agent Pipeline（review-loop）
+          - [1C-3] HandoffContext（传递 objective + artifacts + findings + repo state）
+          - [1C-4] Persistent Event Store（有序 event replay）
+          - [1C-5] Mission Control — TaskDetail（窄切口）
+          → 产出：完整 runtime + E2E + 状态投影
 
-Week 4:  Phase 2（Mission Control）
+Week 4:  Phase 2（Mission Control 完整）
          - Vue 3 脚手架
          - TaskDetail.vue（唯一必须的页面）
          - WebSocket 状态投影
@@ -740,13 +846,14 @@ Week 4:  Phase 2（Mission Control）
          - 前后端联调
          → 产出：可用的 Mission Control
 
-Week 5:  Phase 3（Recovery + Worktree）+ 打磨
-         - Recovery 完整实现
-         - Worktree 基础设施
-         - S1-S7 软标准补齐
-         - README + Demo 视频
-         - GitHub Release v0.2
-```
+Week 5:  Phase 3（Recovery + Worktree + Storage 分层完善）
+          - Recovery 完整实现（进程 kill + worktree cleanup）
+          - Worktree 隔离机制
+          - KnowledgeStore 开始实现（routing.md, lessons.md 写入文件系统）
+          - ArtifactStore 分层（元数据 SQLite + 大文件 FS/Git）
+          - S1-S7 软标准补齐
+          - README + Demo 视频
+          - GitHub Release v0.2
 
 ---
 
@@ -764,9 +871,13 @@ Week 5:  Phase 3（Recovery + Worktree）+ 打磨
 | 8 | 重启后进程还活着怎么办 | **标记 RECOVERING，等用户决策** | 不假设，让用户决定 |
 | 9 | Pipeline 用 YAML 还是代码定义 | **YAML（初期）** | 灵活，但 runtime contract 先定 |
 | 10 | 前端先做完整 UI 还是窄切口 | **窄切口（TaskDetail）** | 先跑通一条链，再扩展 |
+| 11 | SQLite 是否是唯一存储 | **否** | Runtime State → SQLite; Knowledge → Markdown/YAML; Large Artifacts → FS/Git |
+| 12 | Agent Readiness 是 bug 修复还是架构能力 | **架构能力（一等公民）** | 不是 plugin bug，是 Runtime 对 Agent 可用性负责 |
+| 13 | Recovery 策略如何声明 | **声明式（dependency graph）** | 不硬编码，每个 Plugin 自描述依赖和恢复方式 |
+| 14 | Readiness 与 Capability 的关系 | **Readiness 是开关** | UNAVAILABLE → 不进候选集；DEGRADED → 降权；READY → 正常评分 |
 
 ---
 
-**最后更新**：2026-08-15
-**版本**：v1.0
+**最后更新**：2026-08-16
+**版本**：v1.1（新增 Storage Architecture + Agent Readiness）
 **关联文档**：[core-model.md](../runtime/core-model.md)、[task-state-machine.md](../runtime/task-state-machine.md)、[event-protocol.md](../runtime/event-protocol.md)

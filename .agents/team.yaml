@@ -1,24 +1,31 @@
-# TeamMind Dev Team — Phase 1A
+# TeamMind Dev Team — Phase 1C
 
 ## Agents
 
 | Agent | Binary | Worktree | Branch | Role | Scope |
 |-------|--------|----------|--------|------|-------|
-| Codex | `codex` | `D:\DevWorkspaces\teammind-workspace\teammind-wt-codex` | `w7-codex-runtime` | Implementation Lead | Phase 1A runtime entities |
-| Claude Code | `claude` | `D:\DevWorkspaces\teammind-workspace\teammind-wt-claude` | `w7-claude-review` | Architecture Reviewer | Reviews Codex findings only |
+| Codex | `codex` | `D:\DevWorkspaces\teammind-workspace\teammind-wt-codex` | `w7-codex-runtime` | Implementation Lead | Phase 1C-1 (Agent Readiness) + Phase 1C-2/3/5 |
+| Claude Code | `claude` | `D:\DevWorkspaces\teammind-workspace\teammind-wt-claude` | `w7-claude-review` | Architecture Reviewer | Phase 1C-4 (Mission Control review) + all specs |
 
 ## Protocol
 
-1. **Codex** reads the spec in `.agents/tasks/w7-1a-runtime-contract.md`
+1. **Codex** reads the spec in `.agents/tasks/w7-1c-multi-agent-handoff.md`
 2. **Codex** implements in its worktree, commits to `w7-codex-runtime`
-3. **Claude Code** reads the codex branch diff, outputs review to `.agents/handoffs/review-001.md`
+3. **Claude Code** reads the codex branch diff, outputs review to `.agents/handoffs/`
 4. **Codex** fixes based on findings, new commit
-5. **Regression tests pass** → freeze Runtime Contract
+5. **Regression tests pass** → merge to main
 
 ## Constraints
 
-- Codex ONLY touches `backend/src/main/java` and `backend/src/test/java`
-- Codex does NOT touch frontend/, docs/, .agents/
-- No PipelineOrchestrator, no WebSocket changes, no multi-agent logic
-- All new abstractions must explain their impact on: Execution, State, Artifact, Evidence, Event, Command, Recovery
+- Codex ONLY touches `backend/src/main/java`, `backend/src/main/resources`, `backend/src/test/java`
+- No WebSocket changes beyond existing pattern
+- No frontend code changes
+- Agent Readiness is a horizontal concern — must be tested independently
 - Java 17, Spring Boot 3.3.7, Lombok, JPA, SQLite
+
+## Key Design Decisions (from this session)
+
+1. **Storage Architecture**: Markdown/YAML for knowledge/config, SQLite for runtime state, FS/Git for large artifacts
+2. **Agent Readiness**: ReadinessState 七态机 (DISCOVERED→BLOCKED), declaration-based dependency graph, recovery strategies
+3. **Readiness is a gate, not a multiplier**: UNAVAILABLE agents are excluded from routing, not just down-weighted
+4. **Codex++ is a hard dependency**: Codex CLI requires Codex++ running on port 57321; added to Windows startup
