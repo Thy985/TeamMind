@@ -81,6 +81,11 @@ function updateCounts() {
         </NCard>
         <NCard size="small" class="summary-card">
           <NIcon :component="CogOutline" color="#06b6d4" :size="20" />
+          <div class="summary-num">{{ activity?.environmentChanges?.length ?? 0 }}</div>
+          <div class="summary-label">环境变更</div>
+        </NCard>
+        <NCard size="small" class="summary-card">
+          <NIcon :component="CogOutline" color="#ec4899" :size="20" />
           <div class="summary-num">{{ activity?.agentDecisions?.length ?? 0 }}</div>
           <div class="summary-label">Agent 决策</div>
         </NCard>
@@ -125,7 +130,7 @@ function updateCounts() {
       <NCard size="small" class="section-card" v-if="activity?.dependenciesChanged?.length">
         <template #header>
           <NSpace>
-            <NIcon :component="BrainOutline" color="#06b6d4" />
+            <NIcon :component="CogOutline" color="#06b6d4" />
             <span>依赖变更 ({{ activity.dependenciesChanged.length }})</span>
           </NSpace>
         </template>
@@ -136,6 +141,28 @@ function updateCounts() {
             </NTag>
             <NText>{{ d.name }}</NText>
             <NText v-if="d.version" depth="3" style="font-size:12px;">@{{ d.version }}</NText>
+          </div>
+        </div>
+      </NCard>
+
+      <!-- Environment Changes -->
+      <NCard size="small" class="section-card" v-if="activity?.environmentChanges?.length">
+        <template #header>
+          <NSpace>
+            <NIcon :component="CogOutline" color="#f59e0b" />
+            <span>环境变更 ({{ activity.environmentChanges.length }})</span>
+          </NSpace>
+        </template>
+        <div class="env-list">
+          <div v-for="(e, i) in activity.environmentChanges" :key="i" class="env-row">
+            <NTag
+              :type="e.action === 'ADDED' ? 'success' : e.action === 'REMOVED' ? 'warning' : e.action === 'STARTED' ? 'info' : 'default'"
+              size="tiny"
+            >
+              {{ e.typeLabel }}
+            </NTag>
+            <NText>{{ e.name }}</NText>
+            <NText v-if="e.detail" depth="3" style="font-size:12px;">{{ e.detail }}</NText>
           </div>
         </div>
       </NCard>
@@ -207,7 +234,7 @@ function updateCounts() {
 
 .summary-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 12px;
 }
 .summary-card {
@@ -249,6 +276,8 @@ function updateCounts() {
 }
 
 .dep-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.env-list { display: flex; flex-direction: column; gap: 4px; }
+.env-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
 
 .incident-card {
   background: #2a2a3e;

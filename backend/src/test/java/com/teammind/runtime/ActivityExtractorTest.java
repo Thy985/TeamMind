@@ -36,6 +36,7 @@ class ActivityExtractorTest {
         assertTrue(activity.commandsExecuted().isEmpty());
         assertTrue(activity.filesChanged().isEmpty());
         assertTrue(activity.dependenciesChanged().isEmpty());
+        assertTrue(activity.environmentChanges().isEmpty());
         assertTrue(activity.incidents().isEmpty());
         assertTrue(activity.verifications().isEmpty());
         assertTrue(activity.agentDecisions().isEmpty());
@@ -228,9 +229,146 @@ class ActivityExtractorTest {
         assertEquals(1, activity.commandsExecuted().size());
         assertEquals(1, activity.filesChanged().size());
         assertEquals(1, activity.dependenciesChanged().size());
+        assertEquals(0, activity.environmentChanges().size());
         assertEquals(1, activity.incidents().size());
         assertEquals(1, activity.verifications().size());
         assertEquals(1, activity.agentDecisions().size());
+    }
+
+    @Test
+    @DisplayName("extract() 提取 PACKAGE_INSTALLED 环境变更")
+    void shouldExtractPackageInstalled() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent pkg = RuntimeEvent.builder()
+                .type(EventType.PACKAGE_INSTALLED)
+                .taskId("task-1")
+                .payload("{\"name\": \"jsonwebtoken\", \"version\": \"9.0.2\"}")
+                .createdAt(now)
+                .build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(pkg));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertEquals(1, activity.environmentChanges().size());
+        TaskActivity.EnvironmentChange ec = activity.environmentChanges().get(0);
+        assertEquals(TaskActivity.EnvironmentChange.Action.ADDED, ec.action());
+        assertEquals("jsonwebtoken", ec.name());
+        assertTrue(ec.detail().contains("9.0.2"));
+        assertEquals("Package", ec.typeLabel());
+    }
+
+    @Test
+    @DisplayName("extract() 提取 PROCESS_STARTED 环境变更")
+    void shouldExtractProcessStarted() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent proc = RuntimeEvent.builder()
+                .type(EventType.PROCESS_STARTED)
+                .taskId("task-1")
+                .payload("{\"name\": \"codex-server\", \"pid\": \"12345\"}")
+                .createdAt(now)
+                .build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(proc));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertEquals(1, activity.environmentChanges().size());
+        TaskActivity.EnvironmentChange ec = activity.environmentChanges().get(0);
+        assertEquals(TaskActivity.EnvironmentChange.Action.STARTED, ec.action());
+        assertEquals("codex-server", ec.name());
+        assertTrue(ec.detail().contains("12345"));
+        assertEquals("Process", ec.typeLabel());
+    }
+
+    @Test
+    @DisplayName("extract() 提取 ENV_VAR_MODIFIED 环境变更")
+    void shouldExtractEnvVarModified() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent env = RuntimeEvent.builder()
+                .type(EventType.ENV_VAR_MODIFIED)
+                .taskId("task-1")
+                .payload("{\"name\": \"JAVA_HOME\", \"detail\": \"/usr/lib/jvm/java-17\"}")
+                .createdAt(now)
+                .build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(env));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertEquals(1, activity.environmentChanges().size());
+        TaskActivity.EnvironmentChange ec = activity.environmentChanges().get(0);
+        assertEquals(TaskActivity.EnvironmentChange.Action.MODIFIED, ec.action());
+        assertEquals("JAVA_HOME", ec.name());
+        assertEquals("EnvVar", ec.typeLabel());
+    }
+
+    @Test
+    @DisplayName("extract() 提取 FILE_DELETED 环境变更")
+    void shouldExtractFileDeleted() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent del = RuntimeEvent.builder()
+                .type(EventType.FILE_DELETED)
+                .taskId("task-1")
+                .payload("{\"name\": \"src/old/deprecated.ts\"}")
+                .createdAt(now)
+                .build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(del));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertEquals(1, activity.environmentChanges().size());
+        TaskActivity.EnvironmentChange ec = activity.environmentChanges().get(0);
+        assertEquals(TaskActivity.EnvironmentChange.Action.REMOVED, ec.action());
+        assertEquals("src/old/deprecated.ts", ec.name());
+        assertEquals("File", ec.typeLabel());
+    }
+
+    @Test
+    @DisplayName("extract() 提取 COMMAND_EXITED 环境变更")
+    void shouldExtractCommandExited() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent cmd = RuntimeEvent.builder()
+                .type(EventType.COMMAND_EXITED)
+                .taskId("task-1")
+                .payload("{\"name\": \"mvn test\", \"detail\": \"exit 0, 42 tests\"}")
+                .createdAt(now)
+                .build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(cmd));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertEquals(1, activity.environmentChanges().size());
+        TaskActivity.EnvironmentChange ec = activity.environmentChanges().get(0);
+        assertEquals(TaskActivity.EnvironmentChange.Action.STARTED, ec.action());
+        assertEquals("mvn test", ec.name());
+        assertEquals("Command", ec.typeLabel());
+    }
+
+    @Test
+    @DisplayName("extract() 多种环境变更混合提取")
+    void shouldExtractMultipleEnvironmentChanges() {
+        LocalDateTime now = LocalDateTime.now();
+        List<RuntimeEvent> events = List.of(
+                RuntimeEvent.builder().type(EventType.PACKAGE_INSTALLED).taskId("task-1")
+                        .payload("{\"name\": \"express\", \"version\": \"4.18.2\"}")
+                        .createdAt(now).build(),
+                RuntimeEvent.builder().type(EventType.PROCESS_STARTED).taskId("task-1")
+                        .payload("{\"name\": \"node\", \"pid\": \"999\"}")
+                        .createdAt(now.plusSeconds(1)).build(),
+                RuntimeEvent.builder().type(EventType.ENV_VAR_MODIFIED).taskId("task-1")
+                        .payload("{\"name\": \"PORT\", \"detail\": \"3000\"}")
+                        .createdAt(now.plusSeconds(2)).build(),
+                RuntimeEvent.builder().type(EventType.FILE_DELETED).taskId("task-1")
+                        .payload("{\"name\": \"tmp/cache.json\"}")
+                        .createdAt(now.plusSeconds(3)).build()
+        );
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(events);
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertEquals(4, activity.environmentChanges().size());
+        assertTrue(activity.environmentChanges().stream().anyMatch(e -> e.typeLabel().equals("Package")));
+        assertTrue(activity.environmentChanges().stream().anyMatch(e -> e.typeLabel().equals("Process")));
+        assertTrue(activity.environmentChanges().stream().anyMatch(e -> e.typeLabel().equals("EnvVar")));
+        assertTrue(activity.environmentChanges().stream().anyMatch(e -> e.typeLabel().equals("File")));
     }
 
     private RuntimeEvent buildEvent(EventType type, LocalDateTime time) {

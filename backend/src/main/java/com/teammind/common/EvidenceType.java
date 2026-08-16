@@ -13,5 +13,11 @@ public enum EvidenceType {
     /** 命令退出码验证：命令是否以 0 退出 */
     COMMAND_EXIT,
     /** 审查发现：Claude Code review 产出的 findings */
-    REVIEW_FINDINGS
+    REVIEW_FINDINGS,
+    /** 包安装验证：npm/pip install 是否成功安装 */
+    PACKAGE_INSTALLED,
+    /** 环境变量变更验证：env 变量是否实际被修改 */
+    ENV_VAR_MODIFIED,
+    /** 进程启动验证：进程是否真正启动 */
+    PROCESS_STARTED
 }

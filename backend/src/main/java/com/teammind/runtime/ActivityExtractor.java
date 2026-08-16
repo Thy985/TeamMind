@@ -54,6 +54,7 @@ public class ActivityExtractor {
         List<TaskActivity.CommandActivity> commands = extractCommands(events);
         List<String> files = extractFiles(events);
         List<TaskActivity.DependencyChange> deps = extractDependencies(events);
+        List<TaskActivity.EnvironmentChange> envChanges = extractEnvironmentChanges(events);
         List<TaskActivity.IncidentActivity> incidents = extractIncidents(events);
         List<TaskActivity.VerificationActivity> verifications = extractVerifications(events);
         List<TaskActivity.DecisionActivity> decisions = extractDecisions(events);
@@ -63,6 +64,7 @@ public class ActivityExtractor {
                 commands,
                 files,
                 deps,
+                envChanges,
                 incidents,
                 verifications,
                 decisions,
@@ -102,6 +104,58 @@ public class ActivityExtractor {
                 .filter(e -> e.getType() == EventType.DEPENDENCY_CHANGED)
                 .map(this::toDependencyChange)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 提取环境变更记录：PACKAGE_INSTALLED / COMMAND_EXITED / ENV_VAR_MODIFIED / PROCESS_STARTED / FILE_DELETED
+     */
+    private List<TaskActivity.EnvironmentChange> extractEnvironmentChanges(List<RuntimeEvent> events) {
+        return events.stream()
+                .filter(e -> e.getType() == EventType.PACKAGE_INSTALLED
+                        || e.getType() == EventType.COMMAND_EXITED
+                        || e.getType() == EventType.ENV_VAR_MODIFIED
+                        || e.getType() == EventType.PROCESS_STARTED
+                        || e.getType() == EventType.FILE_DELETED)
+                .map(this::toEnvironmentChange)
+                .collect(Collectors.toList());
+    }
+
+    private TaskActivity.EnvironmentChange toEnvironmentChange(RuntimeEvent event) {
+        String name = extractField(event.getPayload(), "name");
+        if (name == null) name = extractField(event.getPayload(), "package");
+        String detail = extractField(event.getPayload(), "detail");
+        if (detail == null) {
+            if (event.getType() == EventType.PACKAGE_INSTALLED) {
+                String ver = extractField(event.getPayload(), "version");
+                detail = ver != null ? "v" + ver : "";
+            } else if (event.getType() == EventType.PROCESS_STARTED) {
+                String pid = extractField(event.getPayload(), "pid");
+                detail = pid != null ? "PID=" + pid : "";
+            }
+        }
+        String finalName = name;
+        String finalDetail = detail != null ? detail : "";
+        TaskActivity.EnvironmentChange.Action action;
+        switch (event.getType()) {
+            case PACKAGE_INSTALLED:
+                return new TaskActivity.EnvironmentChange(
+                        TaskActivity.EnvironmentChange.Action.ADDED, finalName, finalDetail, "Package");
+            case COMMAND_EXITED:
+                return new TaskActivity.EnvironmentChange(
+                        TaskActivity.EnvironmentChange.Action.STARTED, finalName, finalDetail, "Command");
+            case ENV_VAR_MODIFIED:
+                return new TaskActivity.EnvironmentChange(
+                        TaskActivity.EnvironmentChange.Action.MODIFIED, finalName, finalDetail, "EnvVar");
+            case PROCESS_STARTED:
+                return new TaskActivity.EnvironmentChange(
+                        TaskActivity.EnvironmentChange.Action.STARTED, finalName, finalDetail, "Process");
+            case FILE_DELETED:
+                return new TaskActivity.EnvironmentChange(
+                        TaskActivity.EnvironmentChange.Action.REMOVED, finalName, finalDetail, "File");
+            default:
+                return new TaskActivity.EnvironmentChange(
+                        TaskActivity.EnvironmentChange.Action.MODIFIED, finalName, finalDetail, "Env");
+        }
     }
 
     /**
@@ -239,10 +293,7 @@ public class ActivityExtractor {
         }
     }
 
-    /**
-     * Java 17 null-coalescing 工具方法
-     */
-    private static String coalesce(String a, String b) {
+    private String coalesce(String a, String b) {
         return a != null ? a : b;
     }
 }

@@ -193,6 +193,13 @@ public class TaskDetailController {
         result.put("dependenciesChanged", activity.dependenciesChanged().stream()
                 .map(d -> Map.<String, Object>of("action", d.action().name(), "name", d.name(), "version", d.version()))
                 .toList());
+        result.put("environmentChanges", activity.environmentChanges().stream()
+                .map(e -> Map.<String, Object>of(
+                        "action", e.action().name(),
+                        "name", e.name() != null ? e.name() : "",
+                        "detail", e.detail() != null ? e.detail() : "",
+                        "typeLabel", e.typeLabel()))
+                .toList());
         result.put("incidents", activity.incidents().stream()
                 .map(i -> Map.<String, Object>of(
                         "type", i.type(),

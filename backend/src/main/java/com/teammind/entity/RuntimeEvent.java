@@ -83,6 +83,9 @@ public class RuntimeEvent {
             case PROFILE_UPDATED, DRIFT_DETECTED, RECOMMENDATION_GENERATED, LESSON_LEARNED -> EventTier.WARM;
             case TASK_STATE_CHANGED -> EventTier.HOT;
             case DEPENDENCY_CHANGED -> EventTier.WARM;
+            case PACKAGE_INSTALLED, COMMAND_EXITED, ENV_VAR_MODIFIED -> EventTier.COLD;
+            case PROCESS_STARTED -> EventTier.WARM;
+            case FILE_DELETED -> EventTier.COLD;
         };
     }
 

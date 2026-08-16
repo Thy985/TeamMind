@@ -94,5 +94,10 @@ public enum EventType {
     TASK_STATE_CHANGED,
 
     // ─── 环境变更 ─────────────────────────────
-    DEPENDENCY_CHANGED
+    DEPENDENCY_CHANGED,
+    PACKAGE_INSTALLED,
+    COMMAND_EXITED,
+    ENV_VAR_MODIFIED,
+    PROCESS_STARTED,
+    FILE_DELETED
 }

@@ -38,6 +38,7 @@ public record TaskActivity(
         List<CommandActivity> commandsExecuted,
         List<String> filesChanged,
         List<DependencyChange> dependenciesChanged,
+        List<EnvironmentChange> environmentChanges,
         List<IncidentActivity> incidents,
         List<VerificationActivity> verifications,
         List<DecisionActivity> agentDecisions,
@@ -82,10 +83,21 @@ public record TaskActivity(
             String content         // 从 payload 提取的决策内容
     ) {}
 
+    /** 环境变更记录（PACKAGE_INSTALLED / ENV_VAR_MODIFIED / PROCESS_STARTED / FILE_DELETED） */
+    public record EnvironmentChange(
+            Action action,         // ADDED / REMOVED / MODIFIED / STARTED
+            String name,
+            String detail,         // 版本 / 路径 / PID 等
+            String typeLabel       // "Package" / "EnvVar" / "Process" / "File"
+    ) {
+        public enum Action { ADDED, REMOVED, MODIFIED, STARTED }
+    }
+
     /** 空摘要（无事件时返回） */
     public static TaskActivity empty(String taskId) {
         return new TaskActivity(
                 taskId,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),
