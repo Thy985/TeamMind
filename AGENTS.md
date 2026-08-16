@@ -54,7 +54,8 @@ user.email = 1850833838@qq.com
 - **Phase 1C** ✅ Multi-Agent + Event Store + Mission Control (commits `39eb543f` → `5deec127`)
 - **Phase 2** ✅ Mission Control live integration (commits `afba917c` → `c28bef85`)
 - **Phase 3** ✅ CLI Platform + Recovery Hardening + Real Pipeline (commits `e161c5b2` → `25e4a373`)
-- **Phase 3-fix** ✅ E2E readiness-skip eliminated — all 13 tests now attempt real CLI invocations (commit pending)
+- **Phase 3-fix** ✅ E2E readiness-skip eliminated
+- **Phase 4-Sprint 1** ✅ Activity Extractor Engine — Execution Ledger 核心聚合引擎
 
 ## 测试基线
 
