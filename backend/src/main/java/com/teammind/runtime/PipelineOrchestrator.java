@@ -414,9 +414,60 @@ public class PipelineOrchestrator {
                 wsPublisher.publishStepStarted(context.getTaskId(), stepDef.getName(), agentId);
             }
 
-            // Simulate execution (in production, this would call the actual plugin)
-            String output = simulateAgentExecution(agentId, prompt, stepDef);
-            long duration = System.currentTimeMillis() - startMs;
+            // Execute via real plugin invocation
+            String output;
+            long duration;
+            try {
+                var pluginOpt = pluginManager.findById(agentId);
+                if (pluginOpt.isEmpty()) {
+                    log.error("Plugin '{}' not found for step '{}'", agentId, stepDef.getName());
+                    return PipelineStepResult.builder()
+                            .stepName(stepDef.getName())
+                            .agentId(agentId)
+                            .state("FAILED")
+                            .errorReason("Plugin not found: " + agentId)
+                            .durationMs(System.currentTimeMillis() - startMs)
+                            .build();
+                }
+                Plugin plugin = pluginOpt.get();
+                String projectId = context.getProjectId() != null ? context.getProjectId() : "default";
+                Map<String, Object> artifactMap = new java.util.HashMap<>();
+                if (context.getArtifacts() != null) {
+                    context.getArtifacts().forEach((k, v) -> artifactMap.put(k, v));
+                }
+                Plugin.PluginContext pluginCtx = new Plugin.PluginContext(
+                        projectId, context.getTaskId(),
+                        stepDef.getPrompt() != null ? Map.of("prompt", prompt) : Map.of(),
+                        context.getObjective() != null ? context.getObjective() : ".",
+                        artifactMap,
+                        plugin.type() == Plugin.PluginType.VERIFIER
+                                ? List.of("verification")
+                                : List.of("implementation"));
+
+                Plugin.PluginResult result = plugin.invoke(pluginCtx);
+                if (result.success()) {
+                    output = result.data() != null ? result.data().toString() : "";
+                    duration = System.currentTimeMillis() - startMs;
+                } else {
+                    log.warn("Plugin '{}' failed for step '{}': {}", agentId, stepDef.getName(), result.error());
+                    return PipelineStepResult.builder()
+                            .stepName(stepDef.getName())
+                            .agentId(agentId)
+                            .state("FAILED")
+                            .errorReason(result.error())
+                            .durationMs(System.currentTimeMillis() - startMs)
+                            .build();
+                }
+            } catch (Exception e) {
+                log.error("Step '{}' plugin invocation failed: {}", stepDef.getName(), e.getMessage(), e);
+                return PipelineStepResult.builder()
+                        .stepName(stepDef.getName())
+                        .agentId(agentId)
+                        .state("FAILED")
+                        .errorReason(e.getMessage())
+                        .durationMs(System.currentTimeMillis() - startMs)
+                        .build();
+            }
 
             // Create artifact
             String artifactId = UUID.randomUUID().toString();
@@ -455,31 +506,6 @@ public class PipelineOrchestrator {
                     .errorReason(e.getMessage())
                     .durationMs(System.currentTimeMillis() - startMs)
                     .build();
-        }
-    }
-
-    /**
-     * 模拟 Agent 执行（生产环境替换为真实 plugin.invoke()）
-     */
-    private String simulateAgentExecution(String agentId, String prompt,
-                                            PipelineStepDefinition stepDef) {
-        // In production: call plugin.invoke(prompt, projectPath)
-        // For now, simulate based on step type
-        if ("review".equals(stepDef.getName())) {
-            return "[REVIEW] No critical findings. Implementation looks good.\n" +
-                   "  - Code style: OK\n" +
-                   "  - Security: No issues\n" +
-                   "  - Tests: Recommend adding edge case coverage";
-        } else if ("verify".equals(stepDef.getName())) {
-            return "[VERIFY] All checks passed.\n" +
-                   "  - Git diff: clean\n" +
-                   "  - Tests: green\n" +
-                   "  - Lint: no warnings";
-        } else {
-            return "[IMPLEMENT] Completed task.\n" +
-                   "  Files changed: 3\n" +
-                   "  Lines added: 142\n" +
-                   "  Lines removed: 23";
         }
     }
 
@@ -579,3 +605,4 @@ public class PipelineOrchestrator {
         return obj instanceof Map ? (Map<String, Object>) obj : Map.of();
     }
 }
+
