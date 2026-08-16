@@ -4,13 +4,14 @@ import { NCard, NSpace, NTag, NP, NText, NIcon, NButton, NSpin, NEmpty, NTabs, N
 import { 
   PlayOutline, PauseCircleOutline, TimeOutline, CheckmarkCircleOutline, 
   WarningOutline, TrendingUpOutline, TrendingDownOutline, RefreshOutline,
-  AnalyticsOutline, AppstoreOutline, AlertCircleOutline, SettingsOutline
+  AnalyticsOutline, StorefrontOutline, AlertCircleOutline, SettingsOutline
 } from '@vicons/ionicons5'
 import { missionControlApi } from '@/api/axios'
 import Panel1Overview from '@/components/mission/Panel1ProjectOverview.vue'
 import Panel2Live from '@/components/mission/Panel2LiveExecution.vue'
 import Panel3Performance from '@/components/mission/Panel3PerformanceProfile.vue'
 import Panel4Recommendations from '@/components/mission/Panel4Recommendations.vue'
+import TaskDetailPanel from '@/components/mission/TaskDetailPanel.vue'
 
 interface Props {
   projectId: string
@@ -59,6 +60,7 @@ async function saveMode(mode: string) {
 // Tab navigation
 const tabs = [
   { key: 'overview', label: '概览', icon: AnalyticsOutline },
+  { key: 'task-detail', label: 'Task Detail', icon: PlayOutline },
   { key: 'live', label: '实时执行', icon: PlayOutline },
   { key: 'performance', label: '性能档案', icon: TrendingUpOutline },
   { key: 'recommendations', label: '推荐', icon: SettingsOutline }
@@ -74,7 +76,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="mc-header">
       <div class="mc-header-left">
-        <NIcon :size="24" color="#6366f1" :component="AppstoreOutline" />
+        <NIcon :size="24" color="#6366f1" :component="StorefrontOutline" />
         <span class="mc-title">Mission Control</span>
         <NTag 
           :color="{ color: modeColors[controlMode] + '22', borderColor: modeColors[controlMode], textColor: modeColors[controlMode] }"
@@ -107,6 +109,7 @@ onMounted(() => {
     <!-- Panel Content -->
     <div class="mc-content">
       <Panel1Overview v-if="activeTab === 'overview'" :project-id="projectId" />
+      <TaskDetailPanel v-else-if="activeTab === 'task-detail'" task-id="task-1" />
       <Panel2Live v-else-if="activeTab === 'live'" :project-id="projectId" />
       <Panel3Performance v-else-if="activeTab === 'performance'" :project-id="projectId" />
       <Panel4Recommendations v-else-if="activeTab === 'recommendations'" :project-id="projectId" />

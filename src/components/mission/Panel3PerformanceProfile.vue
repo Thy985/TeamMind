@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { NCard, NTag, NIcon, NSpace, NText, NSpin, NEmpty, NDataTable, type TableColumn } from 'naive-ui'
-import { TrendingUpOutline, TrendingDownOutline, MinusOutline } from '@vicons/ionicons5'
+import { TrendingUpOutline, TrendingDownOutline, RemoveOutline } from '@vicons/ionicons5'
 import { missionControlApi } from '@/api/axios'
 
 interface Props {
@@ -21,7 +21,7 @@ const trendColors: Record<string, string> = {
 const trendIcons: Record<string, any> = {
   IMPROVING: TrendingUpOutline,
   DECLINING: TrendingDownOutline,
-  STABLE: MinusOutline
+  STABLE: RemoveOutline
 }
 
 async function refresh() {
@@ -77,7 +77,7 @@ watch(() => profile.value, (val) => {
     <NCard embedded class="trend-card" v-if="profile?.trend">
       <template #header>
         <NSpace>
-          <NIcon :component="trendIcons[profile.trend.overallStatus] ?? MinusOutline" 
+          <NIcon :component="trendIcons[profile.trend.overallStatus] ?? RemoveOutline" 
                  :color="trendColors[profile.trend.overallStatus] ?? '#94a3b8'" />
           <span>整体趋势</span>
           <NTag :color="{ color: trendColors[profile.trend.overallStatus] + '22', 
