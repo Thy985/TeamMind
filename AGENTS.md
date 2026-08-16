@@ -62,6 +62,7 @@ user.email = 1850833838@qq.com
 - **Phase 4-P1** ✅ MissionDetail Ledger tab / pipeline WS events / unified API layer
 - **Phase 4-Sprint 3** ✅ Ledger UI — command folding + Knowledge Candidates + dual-column layout
 - **Phase 4-Sprint 4** ✅ Knowledge Promotion — ADR/Lesson persistence + noise filtering
+- **Phase 4-UI** ✅ Design system enforcement — hardcoded colors/fonts → CSS variables (184→0, 122→0)
 
 ## 测试基线
 
