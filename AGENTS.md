@@ -52,7 +52,8 @@ user.email = 1850833838@qq.com
 - **Phase 1A** ✅ Runtime Contract (commit `a0f458fd`)
 - **Phase 1B** ✅ Single-Agent Runtime (commit `7db54c0f`)
 - **Phase 1C** ✅ Multi-Agent + Event Store + Mission Control (commits `39eb543f` → `5deec127`)
-- **Phase 2** ✅ Mission Control live integration — API + WS + pipeline hooks (commits `afba917c` → `c28bef85`)
+- **Phase 2** ✅ Mission Control live integration (commits `afba917c` → `c28bef85`)
+- **Phase 3** ✅ CLI Platform + Recovery Hardening (commits `e161c5b2`)
 
 ## 测试基线
 
