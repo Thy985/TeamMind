@@ -371,6 +371,101 @@ class ActivityExtractorTest {
         assertTrue(activity.environmentChanges().stream().anyMatch(e -> e.typeLabel().equals("File")));
     }
 
+    @Test
+    @DisplayName("extract() 生成 Knowledge Candidate — 已解决 Incident → LESSON")
+    void shouldGenerateLessonCandidateForResolvedIncident() {
+        LocalDateTime now = LocalDateTime.now();
+        List<RuntimeEvent> events = List.of(
+                RuntimeEvent.builder().type(EventType.ERROR_CRITICAL).taskId("task-1")
+                        .payload("{\"type\": \"Compilation Error\", \"message\": \"type mismatch\"}")
+                        .pluginId("codex").createdAt(now).build(),
+                RuntimeEvent.builder().type(EventType.ERROR_RECOVERABLE).taskId("task-1")
+                        .payload("{}").pluginId("claude-code")
+                        .createdAt(now.plusSeconds(5)).build()
+        );
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(events);
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertFalse(activity.knowledgeCandidates().isEmpty());
+        assertTrue(activity.knowledgeCandidates().stream()
+                .anyMatch(k -> k.type() == TaskActivity.KnowledgeCandidate.CandidateType.LESSON
+                        && k.source().equals("INCIDENT")));
+    }
+
+    @Test
+    @DisplayName("extract() 生成 Knowledge Candidate — 依赖变更 → ADR")
+    void shouldGenerateAdrCandidateForDependencyChange() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent dep = RuntimeEvent.builder()
+                .type(EventType.DEPENDENCY_CHANGED).taskId("task-1")
+                .payload("{\"action\": \"ADDED\", \"name\": \"jsonwebtoken\", \"version\": \"9.0.2\"}")
+                .createdAt(now).build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(dep));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertTrue(activity.knowledgeCandidates().stream()
+                .anyMatch(k -> k.type() == TaskActivity.KnowledgeCandidate.CandidateType.ADR
+                        && k.source().equals("DEPENDENCY")));
+    }
+
+    @Test
+    @DisplayName("extract() 防噪过滤 — 泛化决策内容不生成候选")
+    void shouldFilterNoiseFromVagueDecisions() {
+        LocalDateTime now = LocalDateTime.now();
+        List<RuntimeEvent> events = List.of(
+                RuntimeEvent.builder().type(EventType.DECISION_MADE).taskId("task-1")
+                        .payload("{\"decision\": \"ok\"}").createdAt(now).build(),
+                RuntimeEvent.builder().type(EventType.DECISION_MADE).taskId("task-1")
+                        .payload("{\"decision\": \"done\"}").createdAt(now.plusSeconds(1)).build()
+        );
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(events);
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        // Vague decisions should not generate ADR candidates
+        assertTrue(activity.knowledgeCandidates().stream()
+                .filter(k -> k.source().equals("DECISION"))
+                .toList().isEmpty());
+    }
+
+    @Test
+    @DisplayName("extract() 生成 Knowledge Candidate — 测试失败 → LESSON")
+    void shouldGenerateLessonCandidateForTestFailures() {
+        LocalDateTime now = LocalDateTime.now();
+        List<RuntimeEvent> events = List.of(
+                buildEvent(EventType.TEST_PASSED, now),
+                buildEvent(EventType.TEST_FAILED, now.plusSeconds(1)),
+                buildEvent(EventType.TEST_FAILED, now.plusSeconds(2))
+        );
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(events);
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        assertTrue(activity.knowledgeCandidates().stream()
+                .anyMatch(k -> k.type() == TaskActivity.KnowledgeCandidate.CandidateType.LESSON
+                        && k.source().equals("VERIFICATION")));
+    }
+
+    @Test
+    @DisplayName("extract() 防噪过滤 — 未解决 Incident 不生成候选")
+    void shouldNotGenerateCandidateForUnresolvedIncident() {
+        LocalDateTime now = LocalDateTime.now();
+        RuntimeEvent error = RuntimeEvent.builder()
+                .type(EventType.ERROR_CRITICAL).taskId("task-1")
+                .payload("{\"type\": \"Error\", \"message\": \"crash\"}")
+                .createdAt(now).build();
+        when(eventRepo.findByTaskIdOrderByCreatedAtAsc("task-1")).thenReturn(List.of(error));
+
+        TaskActivity activity = extractor.extract("task-1");
+
+        // Unresolved incident should NOT generate a LESSON candidate
+        assertTrue(activity.knowledgeCandidates().stream()
+                .filter(k -> k.source().equals("INCIDENT"))
+                .toList().isEmpty());
+    }
+
     private RuntimeEvent buildEvent(EventType type, LocalDateTime time) {
         return RuntimeEvent.builder()
                 .type(type)

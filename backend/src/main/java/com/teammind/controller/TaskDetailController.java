@@ -213,6 +213,14 @@ public class TaskDetailController {
         result.put("agentDecisions", activity.agentDecisions().stream()
                 .map(d -> Map.<String, Object>of("type", d.type(), "content", d.content() != null ? d.content() : ""))
                 .toList());
+        result.put("knowledgeCandidates", activity.knowledgeCandidates().stream()
+                .map(k -> Map.<String, Object>of(
+                        "id", k.id(),
+                        "type", k.type().name(),
+                        "title", k.title(),
+                        "description", k.description() != null ? k.description() : "",
+                        "source", k.source() != null ? k.source() : ""))
+                .toList());
         return result;
     }
 

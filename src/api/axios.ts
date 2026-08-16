@@ -288,4 +288,18 @@ export const authApi = {
   me: () => api.get('/auth/me', { retryable: false })
 }
 
+// ==================== Knowledge API (Sprint 4) ====================
+export const knowledgeApi = {
+  save: (data: { type: string; title: string; description?: string; taskId?: string; projectId?: string; source?: string }) =>
+    api.post('/knowledge', data),
+
+  getByTask: (taskId: string) => api.get(`/knowledge/task/${taskId}`),
+
+  getByProject: (projectId: string) => api.get(`/knowledge/project/${projectId}`),
+
+  dismiss: (id: string) => api.post(`/knowledge/${id}/dismiss`),
+
+  delete: (id: string) => api.delete(`/knowledge/${id}`)
+}
+
 export { AppError, classifyError, retryWithBackoff, executeErrorRecovery } from '@/utils/errorHandler'

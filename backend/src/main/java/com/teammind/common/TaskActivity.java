@@ -42,6 +42,7 @@ public record TaskActivity(
         List<IncidentActivity> incidents,
         List<VerificationActivity> verifications,
         List<DecisionActivity> agentDecisions,
+        List<KnowledgeCandidate> knowledgeCandidates,
         LocalDateTime extractedAt
 ) {
 
@@ -93,10 +94,22 @@ public record TaskActivity(
         public enum Action { ADDED, REMOVED, MODIFIED, STARTED }
     }
 
+    /** Knowledge Candidate — 可晋升为 ADR 或 Lesson 的模式 */
+    public record KnowledgeCandidate(
+            String id,             // 唯一标识
+            CandidateType type,    // ADR / LESSON
+            String title,
+            String description,
+            String source          // INCIDENT / DEPENDENCY / DECISION / VERIFICATION
+    ) {
+        public enum CandidateType { ADR, LESSON }
+    }
+
     /** 空摘要（无事件时返回） */
     public static TaskActivity empty(String taskId) {
         return new TaskActivity(
                 taskId,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),

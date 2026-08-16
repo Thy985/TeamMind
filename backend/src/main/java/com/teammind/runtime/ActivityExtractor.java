@@ -58,6 +58,8 @@ public class ActivityExtractor {
         List<TaskActivity.IncidentActivity> incidents = extractIncidents(events);
         List<TaskActivity.VerificationActivity> verifications = extractVerifications(events);
         List<TaskActivity.DecisionActivity> decisions = extractDecisions(events);
+        List<TaskActivity.KnowledgeCandidate> candidates = extractKnowledgeCandidates(
+                incidents, deps, decisions, verifications);
 
         return new TaskActivity(
                 taskId,
@@ -68,6 +70,7 @@ public class ActivityExtractor {
                 incidents,
                 verifications,
                 decisions,
+                candidates,
                 LocalDateTime.now()
         );
     }
@@ -240,7 +243,96 @@ public class ActivityExtractor {
                 .collect(Collectors.toList());
     }
 
-    // ─── Private helpers ──────────────────────────────────────
+    /**
+     * 提取 Knowledge Candidates — 可晋升为 ADR / Lesson 的模式
+     *
+     * 防噪过滤原则：
+     *   - 只在「有足够信号」时生成候选
+     *   - Incident 必须已解决才值得保存为 Lesson
+     *   - 依赖变更必须有 name 才生成 ADR
+     *   - Agent 决策必须有实际内容（非空、非泛化）
+     *   - 测试失败必须有 failed > 0
+     *   - 每种类型最多 2 个候选（避免噪音）
+     */
+    private List<TaskActivity.KnowledgeCandidate> extractKnowledgeCandidates(
+            List<TaskActivity.IncidentActivity> incidents,
+            List<TaskActivity.DependencyChange> deps,
+            List<TaskActivity.DecisionActivity> decisions,
+            List<TaskActivity.VerificationActivity> verifications) {
+
+        List<TaskActivity.KnowledgeCandidate> candidates = new ArrayList<>();
+        int adrCount = 0;
+        int lessonCount = 0;
+
+        // 1. 已解决的 Incident → LESSON 候选（最多 2 个）
+        for (TaskActivity.IncidentActivity inc : incidents) {
+            if (inc.resolved() && lessonCount < 2) {
+                String title = "Lesson: " + inc.type() + " resolved by " + (inc.resolvedBy() != null ? inc.resolvedBy() : "agent");
+                candidates.add(new TaskActivity.KnowledgeCandidate(
+                        "kc-incident-" + inc.type(),
+                        TaskActivity.KnowledgeCandidate.CandidateType.LESSON,
+                        title,
+                        inc.description() != null ? inc.description() : inc.type(),
+                        "INCIDENT"
+                ));
+                lessonCount++;
+            }
+        }
+
+        // 2. 依赖变更 → ADR 候选（最多 1 个，合并展示）
+        if (!deps.isEmpty() && adrCount < 2) {
+            String depNames = deps.stream()
+                    .map(d -> d.name() != null ? d.name() : "?")
+                    .filter(n -> !n.equals("?"))
+                    .limit(5)
+                    .collect(Collectors.joining(", "));
+            if (!depNames.isEmpty()) {
+                candidates.add(new TaskActivity.KnowledgeCandidate(
+                        "kc-deps",
+                        TaskActivity.KnowledgeCandidate.CandidateType.ADR,
+                        "ADR: Dependency decision (" + deps.size() + " change" + (deps.size() > 1 ? "s" : "") + ")",
+                        "Affected: " + depNames,
+                        "DEPENDENCY"
+                ));
+                adrCount++;
+            }
+        }
+
+        // 3. Agent DECISION_MADE → ADR 候选（最多 2 个，需要非空内容）
+        for (TaskActivity.DecisionActivity d : decisions) {
+            if (adrCount >= 2) break;
+            if (!"DECISION_MADE".equals(d.type())) continue;
+            String content = d.content();
+            if (content == null || content.isBlank() || content.length() < 5) continue;
+            // 防噪：跳过过于泛化的内容
+            if (content.toLowerCase().matches("^(ok|done|yes|no|retry|continue|skip)$")) continue;
+            candidates.add(new TaskActivity.KnowledgeCandidate(
+                    "kc-decision-" + adrCount,
+                    TaskActivity.KnowledgeCandidate.CandidateType.ADR,
+                    "ADR: " + content,
+                    content,
+                    "DECISION"
+            ));
+            adrCount++;
+        }
+
+        // 4. 测试失败 → LESSON 候选（最多 1 个）
+        for (TaskActivity.VerificationActivity v : verifications) {
+            if (v.failed() > 0 && lessonCount < 2) {
+                candidates.add(new TaskActivity.KnowledgeCandidate(
+                        "kc-verif-" + v.type(),
+                        TaskActivity.KnowledgeCandidate.CandidateType.LESSON,
+                        "Lesson: " + v.failed() + " test failure" + (v.failed() > 1 ? "s" : "") + " encountered",
+                        v.type() + ": " + v.passed() + " passed, " + v.failed() + " failed",
+                        "VERIFICATION"
+                ));
+                lessonCount++;
+                break;
+            }
+        }
+
+        return candidates;
+    }
 
     private TaskActivity.CommandActivity toCommandActivity(RuntimeEvent event) {
         String command = extractField(event.getPayload(), "command");
