@@ -52,7 +52,7 @@ user.email = 1850833838@qq.com
 - **Phase 1A** ✅ Runtime Contract (commit `a0f458fd`)
 - **Phase 1B** ✅ Single-Agent Runtime (commit `7db54c0f`)
 - **Phase 1C** ✅ Multi-Agent + Event Store + Mission Control (commits `39eb543f` → `5deec127`)
-- **Phase 2** 🟡 待启动
+- **Phase 2** 🟡 Live Integration — API + WS wired, pipeline hook pending (commits `afba917c` → `e64d0094`)
 
 ## 测试基线
 
