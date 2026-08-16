@@ -61,6 +61,7 @@ user.email = 1850833838@qq.com
 - **Phase 4-P0** ✅ Eliminate hardcoded fake data, dead TODO buttons, WebSocket hack
 - **Phase 4-P1** ✅ MissionDetail Ledger tab / pipeline WS events / unified API layer
 - **Phase 4-Sprint 3** ✅ Ledger UI — command folding + Knowledge Candidates + dual-column layout
+- **Phase 4-Sprint 4** ✅ Knowledge Promotion — ADR/Lesson persistence + noise filtering
 
 ## 测试基线
 
