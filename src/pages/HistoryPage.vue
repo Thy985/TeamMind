@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NDataTable, NButton, NSpace, NTag, NInput, NSelect, NEmpty, NIcon } from 'naive-ui'
+import { NCard, NDataTable, NButton, NSpace, NTag, NInput, NSelect, NEmpty, NIcon, useMessage } from 'naive-ui'
 import { PlayOutline, TrashOutline, CopyOutline, SearchOutline } from '@vicons/ionicons5'
 import type { DataTableColumns } from 'naive-ui'
 import type { MissionHistory } from '@/types'
 import { missionApi } from '@/api/axios'
 
 const router = useRouter()
+const message = useMessage()
 
 // State
 const loading = ref(false)
@@ -92,18 +93,34 @@ function viewMission(id: string) {
   router.push({ name: 'mission-detail', params: { id } })
 }
 
-function cloneMission(id: string) {
-  // TODO: Implement clone
-  console.log('Clone mission:', id)
+async function cloneMission(id: string) {
+  try {
+    const res = await missionApi.clone(id)
+    const newId = (res as any)?.data?.id || (res as any)?.id
+    message.success('Mission cloned')
+    if (newId) {
+      router.push({ name: 'mission-detail', params: { id: newId } })
+    } else {
+      loadHistory()
+    }
+  } catch (e) {
+    message.error('Failed to clone mission')
+    console.error('Clone failed:', e)
+  }
 }
 
-function deleteMission(id: string) {
-  // TODO: Implement delete
-  console.log('Delete mission:', id)
+async function deleteMission(id: string) {
+  try {
+    await missionApi.delete(id)
+    message.success('Mission deleted')
+    loadHistory()
+  } catch (e) {
+    message.error('Failed to delete mission')
+    console.error('Delete failed:', e)
+  }
 }
 
-// Fetch data
-onMounted(async () => {
+async function loadHistory() {
   loading.value = true
   try {
     const res = await missionApi.list(1, 20)
@@ -119,7 +136,9 @@ onMounted(async () => {
     console.error('Failed to load history:', e)
   }
   loading.value = false
-})
+}
+
+onMounted(loadHistory)
 </script>
 
 <template>

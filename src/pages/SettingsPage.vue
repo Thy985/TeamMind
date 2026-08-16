@@ -69,7 +69,6 @@ function handleSetDefault(id: string) {
 }
 
 function handleExportData() {
-  // TODO: Export user data
   const data = {
     settings: uiStore.settings,
     exportedAt: new Date().toISOString()

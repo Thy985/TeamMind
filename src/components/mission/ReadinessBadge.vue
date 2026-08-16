@@ -15,9 +15,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   agentId: 'codex',
   agentName: 'Codex',
-  readinessState: 'READY',
-  providerEndpoint: '127.0.0.1:57321',
-  configStatus: 'OK'
+  readinessState: 'UNKNOWN',
+  providerEndpoint: '—',
+  configStatus: '—'
 })
 
 const stateColors: Record<string, string> = {
@@ -52,14 +52,14 @@ const color = computed(() => stateColors[props.readinessState] || '#64748b')
       </NSpace>
     </template>
     <div class="readiness-details">
-      <NText depth="3" style="font-size:12px;">
-        v{{ agentVersion || '0.144.5' }}
+      <NText v-if="agentVersion && agentVersion !== '—'" depth="3" style="font-size:12px;">
+        v{{ agentVersion }}
       </NText>
       <NText depth="3" style="font-size:12px;">
-        | provider: {{ providerEndpoint }}
+        provider: {{ providerEndpoint }}
       </NText>
       <NText depth="3" style="font-size:12px;">
-        | config: {{ configStatus }}
+        config: {{ configStatus }}
       </NText>
     </div>
   </NCard>

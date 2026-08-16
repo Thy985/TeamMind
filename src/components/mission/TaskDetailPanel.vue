@@ -7,6 +7,7 @@ import AgentActivityPanel from './AgentActivityPanel.vue'
 import EvidencePanel from './EvidencePanel.vue'
 import PolicyLogPanel from './PolicyLogPanel.vue'
 import { taskDetailApi } from '@/api/axios'
+import { wsManager } from '@/api'
 import type { TaskDetailSnapshot, TaskStep, TaskArtifact, TaskEvidence, TaskApproval, TaskReadiness } from '@/types'
 
 interface Props {
@@ -98,9 +99,19 @@ const readinessState = computed(() => {
   const r = snapshot.value?.readiness?.[currentAgent.value] as TaskReadiness | undefined
   return r?.state || 'UNKNOWN'
 })
-const agentVersion = computed(() => '0.144.5')
-const providerEndpoint = computed(() => '127.0.0.1:57321')
-const configStatus = computed(() => 'OK')
+const agentVersion = computed(() => {
+  const r = snapshot.value?.readiness?.[currentAgent.value] as TaskReadiness | undefined
+  return (r as any)?.version || (r as any)?.diagnosis || '—'
+})
+const providerEndpoint = computed(() => {
+  const r = snapshot.value?.readiness?.[currentAgent.value] as TaskReadiness | undefined
+  return (r as any)?.endpoint || '—'
+})
+const configStatus = computed(() => {
+  const r = snapshot.value?.readiness?.[currentAgent.value] as TaskReadiness | undefined
+  if (!r) return '—'
+  return r.state === 'READY' ? 'OK' : r.state === 'DEGRADED' ? 'WARN' : 'FAIL'
+})
 
 const handoffHistory = computed(() => {
   const steps = snapshot.value?.steps || []
@@ -151,33 +162,55 @@ const elapsed = computed(() => {
 const routingDecision = computed(() => ({
   plugin: currentAgent.value,
   capability: snapshot.value?.currentStep || 'implementation',
-  score: 0.85,
+  score: (snapshot.value as any)?.routingScore ?? '—',
   readiness: readinessState.value,
-  reason: 'Selected by CapabilityRouter based on capability match + readiness gate'
+  reason: (snapshot.value as any)?.routingReason || `Routed to ${currentAgent.value} based on capability match + readiness gate`
 }))
 
 // ─── WebSocket integration ──────────────────────────────────
-let wsSubscription: (() => void) | null = null
 
 function connectWebSocket() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ws = (window as any).__DSH_BOOT__?.wsManager
-  if (!ws) return
-
-  // Subscribe to task-specific events
-  ws.on('state_update', (data: any) => {
-    if (data.taskId === props.taskId) {
-      snapshot.value = data.snapshot as TaskDetailSnapshot
-      snapshotVersion.value = data.snapshot.snapshotVersion || 0
-      needsApproval.value =
-        (data.snapshot.pendingApprovals?.length || 0) > 0 ||
-        data.snapshot.taskState === 'NEEDS_APPROVAL'
+  // Subscribe to task-specific events via proper wsManager
+  wsManager.on('state_update', (event: any) => {
+    const payload = event?.payload || event
+    if (payload?.taskId === props.taskId || event?.missionId === props.taskId) {
+      const snap = payload?.snapshot || payload
+      if (snap && typeof snap === 'object') {
+        snapshot.value = snap as TaskDetailSnapshot
+        snapshotVersion.value = snap.snapshotVersion || 0
+        needsApproval.value =
+          (snap.pendingApprovals?.length || 0) > 0 ||
+          snap.taskState === 'NEEDS_APPROVAL'
+      }
     }
   })
 
-  ws.on('log', (data: any) => {
-    if (data.taskId === props.taskId) {
-      console.log('[TaskDetail]', data.message)
+  wsManager.on('log', (event: any) => {
+    const payload = event?.payload || event
+    if (event?.missionId === props.taskId || payload?.taskId === props.taskId) {
+      // Log events handled by parent component or console for debugging
+    }
+  })
+
+  wsManager.on('approval_required', (event: any) => {
+    const payload = event?.payload || event
+    if (payload?.taskId === props.taskId || event?.missionId === props.taskId) {
+      needsApproval.value = true
+      loadSnapshot()
+    }
+  })
+
+  wsManager.on('pipeline_step_started', (event: any) => {
+    const payload = event?.payload || event
+    if (payload?.taskId === props.taskId || event?.missionId === props.taskId) {
+      loadSnapshot()
+    }
+  })
+
+  wsManager.on('pipeline_step_completed', (event: any) => {
+    const payload = event?.payload || event
+    if (payload?.taskId === props.taskId || event?.missionId === props.taskId) {
+      loadSnapshot()
     }
   })
 }
@@ -192,7 +225,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  wsSubscription = null
+  // wsManager handlers are cleaned up by disconnect in parent
 })
 </script>
 

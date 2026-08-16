@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { NCard, NGrid, NGi, NButton, NSpace, NTag, NIcon, NEmpty, NModal, NInput, NText } from 'naive-ui'
+import { useRouter } from 'vue-router'
+import { NCard, NGrid, NGi, NButton, NSpace, NTag, NIcon, NEmpty, NModal, NInput, NText, useMessage } from 'naive-ui'
 import { AddOutline, PlayOutline, TrashOutline, CreateOutline } from '@vicons/ionicons5'
 import TemplateCard from '@/components/common/TemplateCard.vue'
 import { useTemplateStore } from '@/stores'
 import type { TeamTemplate } from '@/types'
 
+const router = useRouter()
+const message = useMessage()
 const templateStore = useTemplateStore()
 
 // State
 const showCreateModal = ref(false)
+const showEditModal = ref(false)
+const editingTemplate = ref<TeamTemplate | null>(null)
 const newTemplate = ref({
   name: '',
   description: '',
@@ -23,13 +28,31 @@ const myTemplates = computed(() => templateStore.templates.filter((t: TeamTempla
 
 // Actions
 function handleUseTemplate(templateId: string) {
-  // TODO: Navigate to new mission with template
-  console.log('Use template:', templateId)
+  router.push({ name: 'mission-new', query: { template: templateId } })
 }
 
 function handleEditTemplate(templateId: string) {
-  // TODO: Open edit modal
-  console.log('Edit template:', templateId)
+  const tpl = templateStore.templates.find(t => t.id === templateId)
+  if (tpl) {
+    editingTemplate.value = { ...tpl }
+    showEditModal.value = true
+  }
+}
+
+async function saveEditTemplate() {
+  if (!editingTemplate.value) return
+  try {
+    await templateStore.updateTemplate(editingTemplate.value.id, {
+      name: editingTemplate.value.name,
+      description: editingTemplate.value.description,
+      icon: editingTemplate.value.icon
+    })
+    message.success('Template updated')
+    showEditModal.value = false
+    editingTemplate.value = null
+  } catch (e) {
+    message.error('Failed to update template')
+  }
 }
 
 function handleDeleteTemplate(templateId: string) {
@@ -125,6 +148,39 @@ onMounted(() => {
         <NSpace justify="end">
           <NButton @click="showCreateModal = false">Cancel</NButton>
           <NButton type="primary" @click="handleCreateTemplate">Create</NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Edit Modal -->
+    <NModal
+      v-model:show="showEditModal"
+      preset="card"
+      title="Edit Template"
+      style="width: 500px"
+    >
+      <NSpace vertical v-if="editingTemplate">
+        <div>
+          <NText class="form-label">Name</NText>
+          <NInput v-model:value="editingTemplate.name" placeholder="Template name" />
+        </div>
+        <div>
+          <NText class="form-label">Description</NText>
+          <NInput
+            v-model:value="editingTemplate.description"
+            type="textarea"
+            placeholder="Describe your template..."
+          />
+        </div>
+        <div>
+          <NText class="form-label">Icon</NText>
+          <NInput v-model:value="editingTemplate.icon" placeholder="📄" style="width: 100px" />
+        </div>
+      </NSpace>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showEditModal = false">Cancel</NButton>
+          <NButton type="primary" @click="saveEditTemplate">Save</NButton>
         </NSpace>
       </template>
     </NModal>
