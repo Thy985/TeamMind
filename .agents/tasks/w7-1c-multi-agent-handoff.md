@@ -320,3 +320,95 @@ Claude Code
 **创建时间**: 2026-08-16
 **关联文档**: [w7-product-alpha.md](../../docs/development/w7-product-alpha.md)
 **前置条件**: Phase 1A + 1B 已完成（commit 7db54c0f）
+
+---
+
+### 1C-2 完成记录
+
+**Commit:** `e5f6e90d` | **Tests:** 287 pass, 0 failures
+
+| 交付物 | 文件 |
+|--------|------|
+| PipelineDefinition | `runtime/PipelineDefinition.java` |
+| PipelineStepDefinition | `runtime/PipelineStepDefinition.java` |
+| PipelineContext | `runtime/PipelineContext.java` |
+| PipelineStepResult | `runtime/PipelineStepResult.java` |
+| PipelineExecutionResult | `runtime/PipelineExecutionResult.java` |
+| PipelineRetryPolicy | `runtime/PipelineRetryPolicy.java` |
+| PipelineOrchestrator 扩展 | `runtime/PipelineOrchestrator.java` (executePipeline + YAML parsing) |
+| review-loop.yaml | `resources/pipelines/review-loop.yaml` |
+| 单元测试 | PipelineStepDefinitionTest (7) + PipelineContextTest (5) + PipelineDefinitionTest (5) |
+
+**核心设计：**
+1. YAML-driven: 所有步骤通过 `pipelines/*.yaml` 定义，无需代码修改即可新增 pipeline
+2. 模板变量: `{{objective}}`, `{{constraints}}`, `{{artifacts.xxx.summary}}` 自动替换
+3. 条件路由: `on_critical` / `on_success` / `on_all_pass` / `on_any_fail` 控制流程分支
+4. Readiness 前置: 每个步骤执行前检查 agent readiness
+5. Backoff: 步骤间自动退避，避免资源争抢
+
+---
+
+### 1C-3 完成记录
+
+**Commit:** `2d9dc861` | **Tests:** 302 pass, 0 failures
+
+| 交付物 | 文件 |
+|--------|------|
+| RuntimeEvent 扩展 | `entity/RuntimeEvent.java` (EventTier enum + inferred tier) |
+| EventStoreService | `runtime/EventStoreService.java` (write/query/archive) |
+| EventSourcingService | `runtime/EventSourcingService.java` (replay + validation) |
+| Migration V4 | `db/migration/V4__event_store_tiers.sql` |
+| 单元测试 | EventStoreServiceTest (8) + EventSourcingServiceTest (7) |
+
+**事件分级策略：**
+- HOT (永久): 生命周期、审批、错误事件
+- WARM (7天): 产物、验证、审查事件
+- COLD (30天): 执行细节 → 归档到文件系统后标记 TRASH
+
+---
+
+### 1C-4 完成记录
+
+**Commit:** `6391591b`
+
+| 交付物 | 文件 |
+|--------|------|
+| ReadinessBadge | `src/components/mission/ReadinessBadge.vue` |
+| AgentActivityPanel | `src/components/mission/AgentActivityPanel.vue` |
+| EvidencePanel | `src/components/mission/EvidencePanel.vue` |
+| PolicyLogPanel | `src/components/mission/PolicyLogPanel.vue` |
+| TaskDetailPanel | `src/components/mission/TaskDetailPanel.vue` |
+| MissionControlPage | `src/pages/MissionControlPage.vue` (新增 Task Detail tab) |
+
+**回答 6 个问题：**
+1. 现在谁在干什么？→ Agent 卡片 + 当前步骤进度条
+2. 为什么轮到它？→ 路由决策记录（Capability + Score + Readiness）
+3. 改了什么？→ Artifact 列表（文件变更表格）
+4. 验证了吗？→ Evidence 面板（verified / pending）
+5. 哪里失败了？→ Finding 列表（severity 分级 + 已解决标记）
+6. 需要介入吗？→ Approve/Deny 按钮（NEEDS_APPROVAL 时显示）
+
+**附加修复：** AppstoreOutline/MinusOutline icon 导入错误（pre-existing bug）
+
+---
+
+## Phase 1C 总览
+
+**提交历史：**
+```
+6391591b  W7 Phase 1C-4: Mission Control TaskDetail (narrow cut)
+2d9dc861  W7 Phase 1C-3: Persistent Event Store with Tiered Storage
+e5f6e90d  W7 Phase 1C-2: Multi-Agent Pipeline (YAML-driven, handoff-aware)
+39eb543f  W7 Phase 1C-1: Agent Readiness Subsystem
+2b2ab616  W7: Document Storage Architecture + Agent Readiness subsystem (Phase 1C prep)
+```
+
+**测试统计：**
+- 后端单元测试：302 pass, 0 failures
+- 前端构建：✓ built in 1.31s (4354 modules)
+- E2E 测试：排除（需要真实 LLM provider 基础设施）
+
+**架构完整性：**
+Phase 1A (Runtime Contract) → Phase 1B (Single-Agent) → Phase 1C (Multi-Agent + Event + UI) ✅
+
+Phase 1C 全部完成。Phase 2 可以开始。
