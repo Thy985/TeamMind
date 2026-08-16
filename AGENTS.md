@@ -6,7 +6,7 @@
 
 ```
 user.name  = Thy985
-user.email = thy985@teammind.dev
+user.email = 1850833838@qq.com
 ```
 
 此配置已通过 `git config --local` 设置，不需要每次手动指定。
