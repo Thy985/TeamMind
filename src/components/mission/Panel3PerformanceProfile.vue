@@ -13,9 +13,9 @@ const profile = ref<any>(null)
 const loading = ref(true)
 
 const trendColors: Record<string, string> = {
-  IMPROVING: '#22c55e',
-  DECLINING: '#ef4444',
-  STABLE: '#94a3b8'
+  IMPROVING: 'var(--color-success)',
+  DECLINING: 'var(--color-error)',
+  STABLE: 'var(--color-text-secondary)'
 }
 
 const trendIcons: Record<string, any> = {
@@ -78,11 +78,11 @@ watch(() => profile.value, (val) => {
       <template #header>
         <NSpace>
           <NIcon :component="trendIcons[profile.trend.overallStatus] ?? RemoveOutline" 
-                 :color="trendColors[profile.trend.overallStatus] ?? '#94a3b8'" />
+                 :color="trendColors[profile.trend.overallStatus] ?? 'var(--color-text-secondary)'" />
           <span>整体趋势</span>
           <NTag :color="{ color: trendColors[profile.trend.overallStatus] + '22', 
-                           borderColor: trendColors[profile.trend.overallStatus] ?? '#3a3a5c',
-                           textColor: trendColors[profile.trend.overallStatus] ?? '#94a3b8' }"
+                           borderColor: trendColors[profile.trend.overallStatus] ?? 'var(--color-border)',
+                           textColor: trendColors[profile.trend.overallStatus] ?? 'var(--color-text-secondary)' }"
                 border-type="solid" size="small">
             {{ profile.trend.overallStatus }}
           </NTag>
@@ -90,20 +90,20 @@ watch(() => profile.value, (val) => {
       </template>
       <NSpace :size="24">
         <div>
-          <NText depth="2" style="font-size: 12px">↑ 改善中</NText>
-          <div style="font-size: 24px; font-weight: 700; color: #22c55e">{{ profile.trend.improving }}</div>
+          <NText depth="2" style="font-size: var(--font-size-xs)">↑ 改善中</NText>
+          <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-success)">{{ profile.trend.improving }}</div>
         </div>
         <div>
-          <NText depth="2" style="font-size: 12px">↓ 衰退中</NText>
-          <div style="font-size: 24px; font-weight: 700; color: #ef4444">{{ profile.trend.declining }}</div>
+          <NText depth="2" style="font-size: var(--font-size-xs)">↓ 衰退中</NText>
+          <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-error)">{{ profile.trend.declining }}</div>
         </div>
         <div>
-          <NText depth="2" style="font-size: 12px">— 稳定</NText>
-          <div style="font-size: 24px; font-weight: 700; color: #94a3b8">{{ profile.trend.stable }}</div>
+          <NText depth="2" style="font-size: var(--font-size-xs)">— 稳定</NText>
+          <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-text-secondary)">{{ profile.trend.stable }}</div>
         </div>
         <div>
-          <NText depth="2" style="font-size: 12px">总记录</NText>
-          <div style="font-size: 24px; font-weight: 700; color: #6366f1">{{ profile.trend.totalRecords }}</div>
+          <NText depth="2" style="font-size: var(--font-size-xs)">总记录</NText>
+          <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-primary)">{{ profile.trend.totalRecords }}</div>
         </div>
       </NSpace>
     </NCard>
@@ -132,5 +132,5 @@ watch(() => profile.value, (val) => {
 
 <style scoped>
 .loading-wrap { display: flex; justify-content: center; padding: 60px; }
-.trend-card { background: #1e1e2e; border-color: #3a3a5c; }
+.trend-card { background: var(--color-bg-panel); border-color: var(--color-border); }
 </style>

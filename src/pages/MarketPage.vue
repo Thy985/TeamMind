@@ -88,7 +88,7 @@ onMounted(() => {
         </NGi>
       </NGrid>
       
-      <NEmpty v-else description="No agents found matching your search." />
+      <NEmpty v-else description="未找到匹配的 Agent" />
     </div>
   </div>
 </template>

@@ -40,7 +40,7 @@ const stepLabel = computed(() => stepLabels[props.currentStep] || props.currentS
       <NSpace align="center">
         <NIcon size="20" color="#6366f1" :component="PersonOutline" />
         <div>
-          <NText strong style="font-size:14px;">{{ currentLabel }}</NText>
+          <NText strong style="font-size: var(--font-size-base);">{{ currentLabel }}</NText>
           <div>
             <NTag size="small" type="info">{{ stepLabel }}</NTag>
           </div>
@@ -54,26 +54,26 @@ const stepLabel = computed(() => stepLabels[props.currentStep] || props.currentS
     <!-- Handoff History -->
     <div v-if="handoffHistory.length > 0" class="handoff-history">
       <div class="handoff-header">
-        <NText depth="3" style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
+        <NText depth="3" style="font-size: var(--font-size-2xs);text-transform:uppercase;letter-spacing:0.5px;">
           Handoff History
         </NText>
       </div>
       <div v-for="(h, idx) in handoffHistory" :key="idx" class="handoff-item">
-        <NText depth="2" style="font-size:12px;">
+        <NText depth="2" style="font-size: var(--font-size-xs);">
           {{ agentLabels[h.from] || h.from }}
         </NText>
         <NIcon :component="ArrowForwardOutline" size="14" depth="3" />
-        <NText depth="2" style="font-size:12px;">
+        <NText depth="2" style="font-size: var(--font-size-xs);">
           {{ agentLabels[h.to] || h.to }}
         </NText>
-        <NText depth="3" style="font-size:11px;margin-left:auto;">
+        <NText depth="3" style="font-size: var(--font-size-2xs);margin-left:auto;">
           {{ h.reason }}
         </NText>
       </div>
     </div>
 
     <div v-else class="no-handoffs">
-      <NText depth="3" style="font-size:12px;">No handoffs yet</NText>
+      <NText depth="3" style="font-size: var(--font-size-xs);">No handoffs yet</NText>
     </div>
   </NCard>
 </template>
@@ -99,7 +99,7 @@ const stepLabel = computed(() => stepLabels[props.currentStep] || props.currentS
   padding: 4px 8px;
   background: var(--n-border-color);
   border-radius: var(--n-border-radius);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
 }
 .no-handoffs {
   padding: 8px 0;

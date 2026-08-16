@@ -185,7 +185,7 @@ onMounted(loadHistory)
     <!-- Empty State -->
     <NEmpty 
       v-if="!loading && history.length === 0"
-      description="No missions found. Start a new mission from the Dashboard."
+      description="暂无任务记录，请在 Dashboard 创建新任务"
     >
       <template #extra>
         <NButton type="primary" @click="router.push('/')">

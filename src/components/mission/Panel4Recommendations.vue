@@ -51,37 +51,37 @@ onMounted(() => load())
     <div class="panel">
       <div class="panel-header">
         <NSpace>
-          <NIcon :component="BulbOutline" color="#f59e0b" />
+          <NIcon :component="BulbOutline" color="var(--color-warning)" />
           <span>团队配置推荐</span>
         </NSpace>
       </div>
       <div class="panel-body">
         <NCard v-if="recommendation" embedded size="small">
           <template #header>
-            <NText depth="2" style="font-size: 13px">
+            <NText depth="2" style="font-size: var(--font-size-sm)">
               基于 {{ recommendation.totalTasks }} 次任务表现
             </NText>
           </template>
           <div v-if="recommendation.issues?.length">
             <div v-for="issue in recommendation.issues" :key="issue.role" class="issue-item">
-              <NIcon :component="WarningOutline" color="#ef4444" size="16" />
+              <NIcon :component="WarningOutline" color="var(--color-error)" size="16" />
               <div>
-                <NText depth="2" style="font-size: 13px; font-weight: 600">
+                <NText depth="2" style="font-size: var(--font-size-sm); font-weight: 600">
                   {{ issue.role }} → {{ issue.currentPlugin }}
                 </NText>
-                <NText depth="3" style="font-size: 12px">{{ issue.reason }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-xs)">{{ issue.reason }}</NText>
               </div>
             </div>
           </div>
           <div v-else class="good-config">
-            <NIcon :component="CheckmarkCircleOutline" color="#22c55e" size="20" />
+            <NIcon :component="CheckmarkCircleOutline" color="var(--color-success)" size="20" />
             <NText>当前配置表现良好，无需调整</NText>
           </div>
-          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #3a3a5c">
-            <NText depth="2" style="font-size: 12px">推荐配置：</NText>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border)">
+            <NText depth="2" style="font-size: var(--font-size-xs)">推荐配置：</NText>
             <div v-for="(plugin, role) in recommendation.recommendedTeam" :key="role" class="rec-item">
-              <NTag size="tiny" color="#6366f122" text-color="#6366f1" border-type="solid">{{ role }}</NTag>
-              <NText depth="2" style="font-size: 12px; margin-left: 8px">{{ plugin }}</NText>
+              <NTag size="tiny" color="var(--color-primary)22" text-color="var(--color-primary)" border-type="solid">{{ role }}</NTag>
+              <NText depth="2" style="font-size: var(--font-size-xs); margin-left: 8px">{{ plugin }}</NText>
             </div>
           </div>
         </NCard>
@@ -93,9 +93,9 @@ onMounted(() => load())
     <div class="panel">
       <div class="panel-header">
         <NSpace>
-          <NIcon :component="AlertCircleOutline" color="#ef4444" />
+          <NIcon :component="AlertCircleOutline" color="var(--color-error)" />
           <span>漂移告警</span>
-          <NTag v-if="driftAlerts.length" size="small" color="#ef444422" text-color="#ef4444" border-type="solid">
+          <NTag v-if="driftAlerts.length" size="small" color="var(--color-error)22" text-color="var(--color-error)" border-type="solid">
             {{ driftAlerts.length }}
           </NTag>
         </NSpace>
@@ -108,17 +108,17 @@ onMounted(() => load())
         <div v-if="driftAlerts.length">
           <div v-for="alert in driftAlerts" :key="alert.pluginId + alert.role" class="alert-item">
             <NTag 
-              :color="alert.trend === 'DECLINING' ? '#ef444422' : '#22c55e22'"
-              :text-color="alert.trend === 'DECLINING' ? '#ef4444' : '#22c55e'"
+              :color="alert.trend === 'DECLINING' ? 'var(--color-error)22' : 'var(--color-success)22'"
+              :text-color="alert.trend === 'DECLINING' ? 'var(--color-error)' : 'var(--color-success)'"
               size="tiny"
             >
               {{ alert.trend }}
             </NTag>
             <div class="alert-content">
-              <NText depth="2" style="font-size: 13px; font-weight: 600">
+              <NText depth="2" style="font-size: var(--font-size-sm); font-weight: 600">
                 {{ alert.pluginId }} @ {{ alert.role }}
               </NText>
-              <NText depth="3" style="font-size: 12px">{{ alert.recommendation }}</NText>
+              <NText depth="3" style="font-size: var(--font-size-xs)">{{ alert.recommendation }}</NText>
             </div>
           </div>
         </div>
@@ -140,19 +140,19 @@ onMounted(() => load())
 .panel {
   display: flex;
   flex-direction: column;
-  background: #1e1e2e;
+  background: var(--color-bg-panel);
   border-radius: 12px;
-  border: 1px solid #3a3a5c;
+  border: 1px solid var(--color-border);
   overflow: hidden;
 }
 
 .panel-header {
   padding: 12px 16px;
-  background: #252538;
-  border-bottom: 1px solid #3a3a5c;
+  background: var(--color-bg-hover);
+  border-bottom: 1px solid var(--color-border);
   font-weight: 600;
-  font-size: 14px;
-  color: #e2e8f0;
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -169,7 +169,7 @@ onMounted(() => load())
   align-items: flex-start;
   gap: 8px;
   padding: 8px;
-  background: #ef444411;
+  background: var(--color-error)11;
   border-radius: 8px;
   margin-bottom: 8px;
 }
@@ -179,7 +179,7 @@ onMounted(() => load())
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: #22c55e11;
+  background: var(--color-success)11;
   border-radius: 8px;
 }
 
@@ -194,7 +194,7 @@ onMounted(() => load())
   align-items: flex-start;
   gap: 8px;
   padding: 8px;
-  background: #252538;
+  background: var(--color-bg-hover);
   border-radius: 8px;
   margin-bottom: 8px;
 }

@@ -115,7 +115,7 @@ onMounted(() => {
         </NGi>
       </NGrid>
       
-      <NEmpty v-else description="No public templates available." />
+      <NEmpty v-else description="暂无公开模板" />
     </div>
 
     <!-- Create Modal -->

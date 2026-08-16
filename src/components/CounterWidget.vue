@@ -38,12 +38,12 @@ defineExpose({ count, doubled })
 .counter-widget {
   font-family: system-ui, sans-serif;
   padding: 16px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   max-width: 300px;
 }
 .value-display {
-  font-size: 18px;
+  font-size: var(--font-size-xl);
   margin: 8px 0;
 }
 .button-group {
@@ -59,10 +59,10 @@ button {
   background: #fff;
 }
 button:hover {
-  background: #f0f0f0;
+  background: var(--color-bg-tertiary);
 }
 .status {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: #888;
   margin-top: 8px;
 }

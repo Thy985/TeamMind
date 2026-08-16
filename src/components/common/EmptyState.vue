@@ -65,7 +65,7 @@ const defaultDescriptions = {
 }
 
 .empty-state-icon {
-  font-size: 64px;
+  font-size: var(--font-size-4xl);
   margin-bottom: var(--spacing-4);
   animation: bounce 2s ease-in-out infinite;
 }
@@ -81,14 +81,14 @@ const defaultDescriptions = {
 }
 
 .empty-state-title {
-  font-size: 18px;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-gray-900);
   margin-bottom: var(--spacing-2);
 }
 
 .empty-state-description {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--color-gray-500);
   margin-bottom: var(--spacing-4);
   max-width: 400px;

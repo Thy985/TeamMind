@@ -63,7 +63,7 @@ function formatNumber(num: number): string {
 const trendColors = {
   up: '#10b981',
   down: '#ef4444',
-  stable: '#6b7280'
+  stable: 'var(--color-text-tertiary)'
 }
 
 onMounted(() => {
@@ -138,7 +138,7 @@ onMounted(() => {
               {{ Math.round((stats?.avgDuration || 0) / 60) }} 分钟
             </template>
             <template #prefix>
-              <NIcon color="#6b7280">
+              <NIcon color="var(--color-text-tertiary)">
                 <TimeOutline />
               </NIcon>
             </template>
@@ -236,7 +236,7 @@ onMounted(() => {
 
 .dashboard-header h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
 }
 
 .stats-grid {
@@ -254,7 +254,7 @@ onMounted(() => {
 .empty-chart {
   text-align: center;
   padding: 48px;
-  color: #6b7280;
+  color: var(--color-text-tertiary);
 }
 
 .insights-list {
@@ -284,19 +284,19 @@ onMounted(() => {
 }
 
 .insight-icon {
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
 }
 
 .insight-content h4 {
   margin: 0 0 4px 0;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
 }
 
 .insight-content p {
   margin: 0;
-  font-size: 13px;
-  color: #6b7280;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
 }
 
 .insight-metric {
@@ -305,7 +305,7 @@ onMounted(() => {
   padding: 2px 8px;
   background: rgba(0, 0, 0, 0.05);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
 }
 
@@ -331,7 +331,7 @@ onMounted(() => {
 
 .bar {
   width: 40px;
-  background: linear-gradient(180deg, #6366f1 0%, #818cf8 100%);
+  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
   border-radius: 4px 4px 0 0;
   display: flex;
   justify-content: center;
@@ -340,14 +340,14 @@ onMounted(() => {
 }
 
 .bar-value {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: white;
   padding-top: 4px;
 }
 
 .bar-label {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
 }
 </style>

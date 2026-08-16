@@ -243,7 +243,7 @@ function formatDate(dateStr: string): string {
 }
 
 .template-icon {
-  font-size: 32px;
+  font-size: var(--font-size-3xl);
   display: block;
   margin-bottom: var(--spacing-2);
 }

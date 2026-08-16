@@ -241,18 +241,18 @@ onUnmounted(() => {
       <NCard class="task-header" :bordered="false">
         <div class="header-left">
           <div class="task-title">
-            <NText strong style="font-size:16px;">{{ objective }}</NText>
+            <NText strong style="font-size: var(--font-size-lg);">{{ objective }}</NText>
             <NTag size="small" :type="needsApproval ? 'warning' : 'success'">
               {{ snapshot?.taskState || 'UNKNOWN' }}
             </NTag>
           </div>
           <div class="task-meta">
             <NIcon :component="TimeOutline" size="14" depth="3" />
-            <NText depth="3" style="font-size:12px;">{{ elapsed }} elapsed</NText>
+            <NText depth="3" style="font-size: var(--font-size-xs);">{{ elapsed }} elapsed</NText>
             <span class="divider">|</span>
-            <NText depth="3" style="font-size:12px;">Step {{ stepProgress }}%</NText>
+            <NText depth="3" style="font-size: var(--font-size-xs);">Step {{ stepProgress }}%</NText>
             <span v-if="snapshot?.snapshotVersion" class="divider">|</span>
-            <NText v-if="snapshot?.snapshotVersion" depth="3" style="font-size:11px;">
+            <NText v-if="snapshot?.snapshotVersion" depth="3" style="font-size: var(--font-size-2xs);">
               v{{ snapshot.snapshotVersion }}
             </NText>
           </div>
@@ -303,25 +303,25 @@ onUnmounted(() => {
         <NGi :span="8">
           <NCard size="small" class="routing-card">
             <template #header>
-              <NText strong style="font-size:12px;">Why this agent?</NText>
+              <NText strong style="font-size: var(--font-size-xs);">Why this agent?</NText>
             </template>
             <div class="routing-info">
               <div class="routing-row">
-                <NText depth="3" style="font-size:11px;">Capability</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs);">Capability</NText>
                 <NTag size="tiny" type="info">{{ routingDecision.capability }}</NTag>
               </div>
               <div class="routing-row">
-                <NText depth="3" style="font-size:11px;">Score</NText>
-                <NText strong style="font-size:14px;color:#6366f1;">{{ routingDecision.score }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs);">Score</NText>
+                <NText strong style="font-size: var(--font-size-base);color:var(--color-primary);">{{ routingDecision.score }}</NText>
               </div>
               <div class="routing-row">
-                <NText depth="3" style="font-size:11px;">Readiness</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs);">Readiness</NText>
                 <NTag size="tiny" :color="readinessState === 'READY' ? '#22c55e' : '#f59e0b'">
                   {{ routingDecision.readiness }}
                 </NTag>
               </div>
               <div class="routing-reason">
-                <NText depth="3" style="font-size:11px;">{{ routingDecision.reason }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs);">{{ routingDecision.reason }}</NText>
               </div>
             </div>
           </NCard>
@@ -331,7 +331,7 @@ onUnmounted(() => {
         <NGi :span="8">
           <NCard size="small">
             <template #header>
-              <NText strong style="font-size:12px;">Pipeline Progress</NText>
+              <NText strong style="font-size: var(--font-size-xs);">Pipeline Progress</NText>
             </template>
             <div class="progress-steps">
               <div
@@ -351,10 +351,10 @@ onUnmounted(() => {
                     v-else
                     :component="AlertCircleOutline"
                     size="12"
-                    color="#6366f1"
+                    color="var(--color-primary)"
                   />
                 </div>
-                <NText style="font-size:11px;text-transform:capitalize;">{{ step }}</NText>
+                <NText style="font-size: var(--font-size-2xs);text-transform:capitalize;">{{ step }}</NText>
               </div>
             </div>
             <div class="progress-bar">
@@ -395,12 +395,12 @@ onUnmounted(() => {
                 :key="idx"
                 class="event-item"
               >
-                <NText depth="3" style="font-size:11px;">{{ evt.time }}</NText>
-                <NText style="font-size:11px;">{{ evt.msg }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs);">{{ evt.time }}</NText>
+                <NText style="font-size: var(--font-size-2xs);">{{ evt.msg }}</NText>
               </div>
               <div v-if="snapshot?.steps" class="event-item" v-for="s in snapshot.steps.slice(-3).reverse()" :key="s.id">
-                <NText depth="3" style="font-size:11px;">{{ s.completedAt || s.startedAt || '--:--' }}</NText>
-                <NText style="font-size:11px;">{{ s.stepName }} → {{ s.state }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs);">{{ s.completedAt || s.startedAt || '--:--' }}</NText>
+                <NText style="font-size: var(--font-size-2xs);">{{ s.stepName }} → {{ s.state }}</NText>
               </div>
             </div>
           </NCard>
@@ -476,7 +476,7 @@ onUnmounted(() => {
   padding: 6px 8px;
   background: var(--n-border-color);
   border-radius: var(--n-border-radius);
-  font-size: 11px;
+  font-size: var(--font-size-2xs);
 }
 
 .progress-steps {
@@ -494,7 +494,7 @@ onUnmounted(() => {
 }
 
 .step-item.active .step-dot {
-  background: #6366f1;
+  background: var(--color-primary);
   border-radius: 50%;
   width: 20px;
   height: 20px;
@@ -520,7 +520,7 @@ onUnmounted(() => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-purple));
   transition: width 0.3s ease;
 }
 
@@ -537,6 +537,6 @@ onUnmounted(() => {
   gap: 8px;
   padding: 4px 0;
   border-bottom: 1px solid var(--n-border-color);
-  font-size: 11px;
+  font-size: var(--font-size-2xs);
 }
 </style>

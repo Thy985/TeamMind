@@ -42,21 +42,21 @@ const successRate = computed(() => Math.round((stats.value.successRate || 0) * 1
       <NGi>
         <NCard embedded>
           <NStatistic label="已完成" :value="stats.completed ?? 0">
-            <template #prefix><NIcon :component="CheckmarkCircleOutline" color="#22c55e" /></template>
+            <template #prefix><NIcon :component="CheckmarkCircleOutline" color="var(--color-success)" /></template>
           </NStatistic>
         </NCard>
       </NGi>
       <NGi>
         <NCard embedded>
           <NStatistic label="失败" :value="stats.failed ?? 0">
-            <template #prefix><NIcon :component="CloseCircleOutline" color="#ef4444" /></template>
+            <template #prefix><NIcon :component="CloseCircleOutline" color="var(--color-error)" /></template>
           </NStatistic>
         </NCard>
       </NGi>
       <NGi>
         <NCard embedded>
           <NStatistic label="进行中" :value="stats.pending ?? 0">
-            <template #prefix><NIcon :component="PlayOutline" color="#6366f1" /></template>
+            <template #prefix><NIcon :component="PlayOutline" color="var(--color-primary)" /></template>
           </NStatistic>
         </NCard>
       </NGi>
@@ -73,7 +73,7 @@ const successRate = computed(() => Math.round((stats.value.successRate || 0) * 1
             :height="12"
             style="margin-top: 8px"
           />
-          <NText depth="3" style="font-size: 12px; margin-top: 8px; display: block">
+          <NText depth="3" style="font-size: var(--font-size-xs); margin-top: 8px; display: block">
             基于 {{ stats.totalTasks ?? 0 }} 次任务
           </NText>
         </NCard>
@@ -84,7 +84,7 @@ const successRate = computed(() => Math.round((stats.value.successRate || 0) * 1
             :value="stats.avgDurationMs ? Math.round(stats.avgDurationMs / 1000) + 's' : '—'" 
             label="Task Duration"
           />
-          <NText depth="3" style="font-size: 12px; margin-top: 8px; display: block">
+          <NText depth="3" style="font-size: var(--font-size-xs); margin-top: 8px; display: block">
             从任务提交到完成
           </NText>
         </NCard>
@@ -94,10 +94,10 @@ const successRate = computed(() => Math.round((stats.value.successRate || 0) * 1
     <div style="margin-top: 16px">
       <NCard embedded title="控制模式">
         <NSpace>
-          <NTag :color="{ color: stats.controlMode === 'AUTOMATED' ? '#22c55e22' : '#3a3a5c', borderColor: stats.controlMode === 'AUTOMATED' ? '#22c55e' : '#3a3a5c', textColor: stats.controlMode === 'AUTOMATED' ? '#22c55e' : '#94a3b8' }" border-type="solid">
+          <NTag :color="{ color: stats.controlMode === 'AUTOMATED' ? 'var(--color-success)22' : 'var(--color-border)', borderColor: stats.controlMode === 'AUTOMATED' ? 'var(--color-success)' : 'var(--color-border)', textColor: stats.controlMode === 'AUTOMATED' ? 'var(--color-success)' : 'var(--color-text-secondary)' }" border-type="solid">
             {{ stats.controlMode ?? 'SUPERVISED' }}
           </NTag>
-          <NText depth="3" style="font-size: 13px">
+          <NText depth="3" style="font-size: var(--font-size-sm)">
             {{ stats.controlMode === 'AUTOMATED' ? 'Agent 自动执行，无需人工确认' 
               : stats.controlMode === 'SUPERVISED' ? '关键操作需人工审批' 
               : '所有操作需人工确认' }}

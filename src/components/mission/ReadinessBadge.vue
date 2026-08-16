@@ -21,11 +21,11 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const stateColors: Record<string, string> = {
-  READY: '#22c55e',
-  DEGRADED: '#f59e0b',
-  RECOVERING: '#3b82f6',
-  BLOCKED: '#ef4444',
-  UNAVAILABLE: '#64748b'
+  READY: 'var(--color-success)',
+  DEGRADED: 'var(--color-warning)',
+  RECOVERING: 'var(--color-info)',
+  BLOCKED: 'var(--color-error)',
+  UNAVAILABLE: 'var(--color-text-tertiary)'
 }
 
 const stateIcons: Record<string, any> = {
@@ -37,7 +37,7 @@ const stateIcons: Record<string, any> = {
 }
 
 const icon = computed(() => stateIcons[props.readinessState] || AlertCircleOutline)
-const color = computed(() => stateColors[props.readinessState] || '#64748b')
+const color = computed(() => stateColors[props.readinessState] || 'var(--color-text-tertiary)')
 </script>
 
 <template>
@@ -52,13 +52,13 @@ const color = computed(() => stateColors[props.readinessState] || '#64748b')
       </NSpace>
     </template>
     <div class="readiness-details">
-      <NText v-if="agentVersion && agentVersion !== '—'" depth="3" style="font-size:12px;">
+      <NText v-if="agentVersion && agentVersion !== '—'" depth="3" style="font-size: var(--font-size-xs);">
         v{{ agentVersion }}
       </NText>
-      <NText depth="3" style="font-size:12px;">
+      <NText depth="3" style="font-size: var(--font-size-xs);">
         provider: {{ providerEndpoint }}
       </NText>
-      <NText depth="3" style="font-size:12px;">
+      <NText depth="3" style="font-size: var(--font-size-xs);">
         config: {{ configStatus }}
       </NText>
     </div>

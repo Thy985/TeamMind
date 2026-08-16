@@ -81,7 +81,7 @@ const emit = defineEmits<{
 }
 
 .template-icon {
-  font-size: 32px;
+  font-size: var(--font-size-3xl);
 }
 
 .template-title {

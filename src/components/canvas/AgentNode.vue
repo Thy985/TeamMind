@@ -121,7 +121,7 @@ const currentStatus = computed(() => statusConfig[props.data.status || 'idle'])
 }
 
 .node-icon {
-  font-size: 28px;
+  font-size: var(--font-size-2xl);
 }
 
 .node-title {

@@ -162,7 +162,7 @@ function handleMenuSelect(key: string) {
 }
 
 .logo-icon {
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
 }
 
 .logo-text {

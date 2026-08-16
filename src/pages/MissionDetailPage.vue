@@ -329,15 +329,15 @@ onUnmounted(() => {
     <!-- Pipeline Step Banner -->
     <div v-if="pipelineStepName" class="pipeline-banner">
       <NSpin size="small" />
-      <NText depth="2" style="font-size:13px;">
+      <NText depth="2" style="font-size: var(--font-size-sm);">
         {{ pipelineStepAgent }} executing: <strong>{{ pipelineStepName }}</strong>
       </NText>
     </div>
 
     <!-- Approval Banner -->
     <div v-if="showApprovalBanner" class="approval-banner">
-      <NIcon :component="AlertCircleOutline" color="#f59e0b" />
-      <NText style="font-size:13px;">Approval required — check Task Detail for pending actions</NText>
+      <NIcon :component="AlertCircleOutline" color="var(--color-warning)" />
+      <NText style="font-size: var(--font-size-sm);">Approval required — check Task Detail for pending actions</NText>
       <NButton size="tiny" @click="showApprovalBanner = false">Dismiss</NButton>
     </div>
 
@@ -406,9 +406,9 @@ onUnmounted(() => {
     <NCard class="ledger-card" v-if="!isNewMission">
       <template #header>
         <NSpace align="center">
-          <NIcon :component="DocumentTextOutline" color="#6366f1" />
+          <NIcon :component="DocumentTextOutline" color="var(--color-primary)" />
           <NText strong>Execution Ledger</NText>
-          <NText depth="3" style="font-size:12px;">Activity summary from runtime events</NText>
+          <NText depth="3" style="font-size: var(--font-size-xs);">Activity summary from runtime events</NText>
         </NSpace>
       </template>
       <ActivityLedgerPanel :task-id="missionId" />
@@ -477,8 +477,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #6366f122;
-  border: 1px solid #6366f144;
+  background: var(--color-primary)22;
+  border: 1px solid var(--color-primary)44;
   border-radius: 8px;
   margin-bottom: var(--spacing-3);
 }
@@ -488,8 +488,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #f59e0b22;
-  border: 1px solid #f59e0b44;
+  background: var(--color-warning)22;
+  border: 1px solid var(--color-warning)44;
   border-radius: 8px;
   margin-bottom: var(--spacing-3);
 }

@@ -23,13 +23,13 @@ const loading = ref(true)
 const message = useMessage()
 
 const stateColors: Record<string, { color: string; bg: string }> = {
-  ORCHESTRATING: { color: '#6366f1', bg: '#6366f122' },
-  EXECUTING: { color: '#f59e0b', bg: '#f59e0b22' },
-  VERIFYING: { color: '#8b5cf6', bg: '#8b5cf622' },
-  NEEDS_APPROVAL: { color: '#ef4444', bg: '#ef444422' },
-  DONE: { color: '#22c55e', bg: '#22c55e22' },
-  FAILED: { color: '#ef4444', bg: '#ef444422' },
-  CANCELLED: { color: '#64748b', bg: '#64748b22' }
+  ORCHESTRATING: { color: 'var(--color-primary)', bg: 'var(--color-primary)22' },
+  EXECUTING: { color: 'var(--color-warning)', bg: 'var(--color-warning)22' },
+  VERIFYING: { color: 'var(--color-purple)', bg: 'var(--color-purple)22' },
+  NEEDS_APPROVAL: { color: 'var(--color-error)', bg: 'var(--color-error)22' },
+  DONE: { color: 'var(--color-success)', bg: 'var(--color-success)22' },
+  FAILED: { color: 'var(--color-error)', bg: 'var(--color-error)22' },
+  CANCELLED: { color: 'var(--color-text-tertiary)', bg: 'var(--color-text-tertiary)22' }
 }
 
 async function refresh() {
@@ -67,7 +67,7 @@ function formatDuration(ms: number | null) {
     <div class="panel">
       <div class="panel-header">
         <NSpace>
-          <NIcon :component="PlayOutline" color="#6366f1" />
+          <NIcon :component="PlayOutline" color="var(--color-primary)" />
           <span>正在执行 ({{ runningTasks.length }})</span>
         </NSpace>
         <NButton size="tiny" @click="refresh"><template #icon><NIcon :component="RefreshOutline" /></template></NButton>
@@ -77,22 +77,22 @@ function formatDuration(ms: number | null) {
           <NListItem v-for="task in runningTasks" :key="task.id" class="task-item" @click="selectTask(task.id)">
             <template #prefix>
               <NTag
-                :color="{ color: stateColors[task.state]?.bg ?? '#3a3a5c', borderColor: stateColors[task.state]?.color ?? '#3a3a5c', textColor: stateColors[task.state]?.color ?? '#94a3b8' }"
+                :color="{ color: stateColors[task.state]?.bg ?? 'var(--color-border)', borderColor: stateColors[task.state]?.color ?? 'var(--color-border)', textColor: stateColors[task.state]?.color ?? 'var(--color-text-secondary)' }"
                 size="small"
               >
                 {{ task.state ?? task.status }}
               </NTag>
             </template>
             <div class="task-info">
-              <NText depth="2" style="font-size: 13px">{{ task.title ?? 'Untitled' }}</NText>
+              <NText depth="2" style="font-size: var(--font-size-sm)">{{ task.title ?? 'Untitled' }}</NText>
               <NSpace size="small" style="margin-top: 4px">
-                <NText depth="3" style="font-size: 11px">
+                <NText depth="3" style="font-size: var(--font-size-2xs)">
                   <NIcon :component="TimeOutline" size="12" />
                   {{ formatDuration((task as any).durationMs) }}
                 </NText>
               </NSpace>
             </div>
-            <NIcon :component="PlayOutline" color="#6366f1" size="16" style="flex-shrink:0" />
+            <NIcon :component="PlayOutline" color="var(--color-primary)" size="16" style="flex-shrink:0" />
           </NListItem>
         </NList>
         <NEmpty v-else description="当前没有执行中的任务" style="padding: 40px 0" />
@@ -103,7 +103,7 @@ function formatDuration(ms: number | null) {
     <div class="panel">
       <div class="panel-header">
         <NSpace>
-          <NIcon :component="TimeOutline" color="#94a3b8" />
+          <NIcon :component="TimeOutline" color="var(--color-text-secondary)" />
           <span>最近执行记录</span>
         </NSpace>
       </div>
@@ -113,19 +113,19 @@ function formatDuration(ms: number | null) {
             <template #prefix>
               <NIcon
                 :component="task.state === 'DONE' || task.status === 'completed' ? CheckmarkCircleOutline : CloseCircleOutline"
-                :color="task.state === 'DONE' || task.status === 'completed' ? '#22c55e' : '#ef4444'"
+                :color="task.state === 'DONE' || task.status === 'completed' ? 'var(--color-success)' : 'var(--color-error)'"
               />
             </template>
             <div class="task-info">
-              <NText depth="2" style="font-size: 13px">{{ task.title ?? 'Untitled' }}</NText>
+              <NText depth="2" style="font-size: var(--font-size-sm)">{{ task.title ?? 'Untitled' }}</NText>
               <NSpace size="small" style="margin-top: 4px">
-                <NTag size="tiny" :color="stateColors[task.state]?.bg ?? '#3a3a5c'" :text-color="stateColors[task.state]?.color ?? '#94a3b8'">
+                <NTag size="tiny" :color="stateColors[task.state]?.bg ?? 'var(--color-border)'" :text-color="stateColors[task.state]?.color ?? 'var(--color-text-secondary)'">
                   {{ task.state ?? task.status }}
                 </NTag>
-                <NText depth="3" style="font-size: 11px">{{ formatDuration((task as any).durationMs) }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-2xs)">{{ formatDuration((task as any).durationMs) }}</NText>
               </NSpace>
             </div>
-            <NIcon :component="PlayOutline" color="#6366f1" size="16" style="flex-shrink:0" />
+            <NIcon :component="PlayOutline" color="var(--color-primary)" size="16" style="flex-shrink:0" />
           </NListItem>
         </NList>
         <NEmpty v-else description="暂无执行记录" style="padding: 40px 0" />
@@ -147,19 +147,19 @@ function formatDuration(ms: number | null) {
 .panel {
   display: flex;
   flex-direction: column;
-  background: #1e1e2e;
+  background: var(--color-bg-panel);
   border-radius: 12px;
-  border: 1px solid #3a3a5c;
+  border: 1px solid var(--color-border);
   overflow: hidden;
 }
 
 .panel-header {
   padding: 12px 16px;
-  background: #252538;
-  border-bottom: 1px solid #3a3a5c;
+  background: var(--color-bg-hover);
+  border-bottom: 1px solid var(--color-border);
   font-weight: 600;
-  font-size: 14px;
-  color: #e2e8f0;
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -176,7 +176,7 @@ function formatDuration(ms: number | null) {
   transition: background 0.15s;
 }
 .task-item:hover {
-  background: #252538;
+  background: var(--color-bg-hover);
 }
 
 .task-info {

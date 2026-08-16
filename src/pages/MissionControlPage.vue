@@ -36,9 +36,9 @@ const modeOptions = [
 ]
 
 const modeColors: Record<string, string> = {
-  AUTOMATED: '#22c55e',
-  SUPERVISED: '#f59e0b',
-  MANUAL: '#ef4444'
+  AUTOMATED: 'var(--color-success)',
+  SUPERVISED: 'var(--color-warning)',
+  MANUAL: 'var(--color-error)'
 }
 
 async function loadMode() {
@@ -84,7 +84,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="mc-header">
       <div class="mc-header-left">
-        <NIcon :size="24" color="#6366f1" :component="StorefrontOutline" />
+        <NIcon :size="24" color="var(--color-primary)" :component="StorefrontOutline" />
         <span class="mc-title">Mission Control</span>
         <NTag
           :color="{ color: modeColors[controlMode] + '22', borderColor: modeColors[controlMode], textColor: modeColors[controlMode] }"
@@ -173,8 +173,8 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-  border-bottom: 1px solid #3a3a5c;
+  background: linear-gradient(135deg, var(--color-bg-panel) 0%, var(--color-bg-tertiary) 100%);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .mc-header-left {
@@ -184,23 +184,23 @@ onMounted(() => {
 }
 
 .mc-title {
-  font-size: 18px;
+  font-size: var(--font-size-xl);
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--color-text-primary);
   letter-spacing: 0.5px;
 }
 
 .mc-tabs {
   padding: 0 24px;
-  background: #1e1e2e;
-  border-bottom: 1px solid #3a3a5c;
+  background: var(--color-bg-panel);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .mc-content {
   flex: 1;
   overflow: auto;
   padding: 24px;
-  background: #0f0f1a;
+  background: var(--color-bg-primary);
 }
 
 .mb-4 { margin-bottom: 16px; }

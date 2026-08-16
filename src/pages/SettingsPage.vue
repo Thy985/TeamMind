@@ -178,7 +178,7 @@ function handleExportData() {
               <div class="setting-row">
                 <div class="setting-info">
                   <NText>Theme</NText>
-                  <NText depth="3" style="font-size: 12px">Choose your preferred theme</NText>
+                  <NText depth="3" style="font-size: var(--font-size-xs)">Choose your preferred theme</NText>
                 </div>
                 <NSpace>
                   <NButton 
@@ -201,7 +201,7 @@ function handleExportData() {
               <div class="setting-row">
                 <div class="setting-info">
                   <NText>Language</NText>
-                  <NText depth="3" style="font-size: 12px">Select display language</NText>
+                  <NText depth="3" style="font-size: var(--font-size-xs)">Select display language</NText>
                 </div>
                 <NSelect 
                   :value="uiStore.settings.language"
@@ -219,7 +219,7 @@ function handleExportData() {
               <div class="setting-row">
                 <div class="setting-info">
                   <NText>Privacy Mode</NText>
-                  <NText depth="3" style="font-size: 12px">Limit data collection and sharing</NText>
+                  <NText depth="3" style="font-size: var(--font-size-xs)">Limit data collection and sharing</NText>
                 </div>
                 <NSwitch 
                   :value="uiStore.settings.privacyMode"
@@ -230,7 +230,7 @@ function handleExportData() {
               <div class="setting-row">
                 <div class="setting-info">
                   <NText>Auto Save</NText>
-                  <NText depth="3" style="font-size: 12px">Automatically save mission progress</NText>
+                  <NText depth="3" style="font-size: var(--font-size-xs)">Automatically save mission progress</NText>
                 </div>
                 <NSwitch 
                   :value="uiStore.settings.autoSave"
@@ -247,7 +247,7 @@ function handleExportData() {
                 <template #icon><NIcon><DownloadOutline /></NIcon></template>
                 Export Settings
               </NButton>
-              <NAlert type="info" style="font-size: 12px">
+              <NAlert type="info" style="font-size: var(--font-size-xs)">
                 Export your settings and configurations as a JSON file.
               </NAlert>
             </NSpace>

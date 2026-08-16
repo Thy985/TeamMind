@@ -117,7 +117,7 @@ const permissionsText = props.agent.permissions?.join(', ') || 'No special permi
 }
 
 .agent-icon {
-  font-size: 32px;
+  font-size: var(--font-size-3xl);
 }
 
 .agent-title {

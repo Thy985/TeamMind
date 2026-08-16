@@ -149,7 +149,7 @@ onMounted(() => {
       fit-view-on-init
       class="vue-flow-container"
     >
-      <Background pattern-color="#374151" :gap="20" />
+      <Background pattern-color="#3a3a5c" :gap="20" />
       <Controls />
     </VueFlow>
 

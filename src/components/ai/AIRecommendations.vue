@@ -14,7 +14,7 @@ const recommendationIcons = {
 }
 
 const recommendationColors = {
-  mission: '#6366f1',
+  mission: 'var(--color-primary)',
   agent: '#10b981',
   template: '#f59e0b',
   optimization: '#3b82f6'
@@ -29,7 +29,7 @@ function handleAction(action: any) {
 // 获取推荐卡片样式
 function getCardStyle(type: string) {
   return {
-    borderLeft: `4px solid ${recommendationColors[type as keyof typeof recommendationColors] || '#6366f1'}`
+    borderLeft: `4px solid ${recommendationColors[type as keyof typeof recommendationColors] || 'var(--color-primary)'}`
   }
 }
 
@@ -120,7 +120,7 @@ fetchRecommendations()
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 16px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
 }
 
@@ -128,7 +128,7 @@ fetchRecommendations()
 .empty {
   text-align: center;
   padding: 32px;
-  color: #6b7280;
+  color: var(--color-text-tertiary);
 }
 
 .recommendations-list {
@@ -154,7 +154,7 @@ fetchRecommendations()
 }
 
 .card-icon {
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
 }
 
 .card-info {
@@ -163,14 +163,14 @@ fetchRecommendations()
 
 .card-info h4 {
   margin: 0 0 4px 0;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
 }
 
 .card-description {
   margin: 0;
-  font-size: 13px;
-  color: #6b7280;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
 }
 
 .card-score {
@@ -181,8 +181,8 @@ fetchRecommendations()
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: #6b7280;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
   margin-bottom: 12px;
 }
 
@@ -199,7 +199,7 @@ fetchRecommendations()
   padding: 12px;
   background: rgba(99, 102, 241, 0.1);
   border-radius: 8px;
-  font-size: 13px;
-  color: #6366f1;
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
 }
 </style>

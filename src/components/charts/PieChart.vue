@@ -30,12 +30,12 @@ const chartData = computed(() =>
 
 // 默认颜色
 const colors = [
-  '#6366f1',
+  'var(--color-primary)',
   '#10b981',
   '#f59e0b',
   '#ef4444',
   '#3b82f6',
-  '#8b5cf6',
+  'var(--color-purple)',
   '#ec4899',
   '#06b6d4'
 ]
@@ -114,7 +114,7 @@ function getSliceRange(item: typeof chartData.value[0], index: number) {
 
 .chart-title {
   margin: 0 0 16px 0;
-  font-size: 16px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
 }
 
@@ -146,14 +146,14 @@ svg {
 }
 
 .total-label {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: var(--font-size-base);
+  color: var(--color-text-tertiary);
 }
 
 .total-value {
-  font-size: 32px;
+  font-size: var(--font-size-3xl);
   font-weight: bold;
-  color: #111827;
+  color: var(--color-bg-primary);
 }
 
 .legend {
@@ -177,12 +177,12 @@ svg {
 }
 
 .legend-label {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: var(--font-size-base);
+  color: var(--color-text-tertiary);
 }
 
 .legend-value {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
 }
 </style>

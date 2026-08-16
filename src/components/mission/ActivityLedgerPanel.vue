@@ -93,39 +93,39 @@ onMounted(loadActivity)
   </div>
   <NSpin v-else :show="loading">
     <div v-if="error" class="error-box">
-      <NIcon :component="AlertCircleOutline" color="#ef4444" />
-      <NText style="color:#ef4444;">{{ error }}</NText>
+      <NIcon :component="AlertCircleOutline" color="var(--color-error)" />
+      <NText style="color:var(--color-error);">{{ error }}</NText>
     </div>
     <div v-else class="ledger">
       <!-- Summary Cards -->
       <div class="summary-row">
         <NCard size="small" class="summary-card">
-          <NIcon :component="CodeOutline" color="#6366f1" :size="20" />
+          <NIcon :component="CodeOutline" color="var(--color-primary)" :size="20" />
           <div class="summary-num">{{ totalCommands }}</div>
           <div class="summary-label">命令执行</div>
         </NCard>
         <NCard size="small" class="summary-card">
-          <NIcon :component="PricetagOutline" color="#22c55e" :size="20" />
+          <NIcon :component="PricetagOutline" color="var(--color-success)" :size="20" />
           <div class="summary-num">{{ totalFiles }}</div>
           <div class="summary-label">文件变更</div>
         </NCard>
         <NCard size="small" class="summary-card">
-          <NIcon :component="AlertCircleOutline" color="#f59e0b" :size="20" />
+          <NIcon :component="AlertCircleOutline" color="var(--color-warning)" :size="20" />
           <div class="summary-num">{{ totalIncidents }}</div>
           <div class="summary-label">事件/问题</div>
         </NCard>
         <NCard size="small" class="summary-card">
-          <NIcon :component="CheckmarkCircleOutline" color="#8b5cf6" :size="20" />
+          <NIcon :component="CheckmarkCircleOutline" color="var(--color-purple)" :size="20" />
           <div class="summary-num">{{ totalVerifications }}</div>
           <div class="summary-label">验证结果</div>
         </NCard>
         <NCard size="small" class="summary-card">
-          <NIcon :component="CogOutline" color="#06b6d4" :size="20" />
+          <NIcon :component="CogOutline" color="var(--color-cyan)" :size="20" />
           <div class="summary-num">{{ totalEnvChanges }}</div>
           <div class="summary-label">环境变更</div>
         </NCard>
         <NCard size="small" class="summary-card">
-          <NIcon :component="CogOutline" color="#ec4899" :size="20" />
+          <NIcon :component="CogOutline" color="var(--color-pink)" :size="20" />
           <div class="summary-num">{{ totalDecisions }}</div>
           <div class="summary-label">Agent 决策</div>
         </NCard>
@@ -136,19 +136,19 @@ onMounted(loadActivity)
         <!-- Left: What Changed -->
         <div class="ledger-col">
           <div class="col-header">
-            <NIcon :component="DocumentTextOutline" color="#6366f1" :size="16" />
+            <NIcon :component="DocumentTextOutline" color="var(--color-primary)" :size="16" />
             <NText strong>What Changed</NText>
           </div>
 
           <!-- Commands (folded) -->
           <div v-if="totalCommands > 0" class="changed-section">
             <div class="changed-summary" @click="commandsExpanded = !commandsExpanded">
-              <NIcon :component="TerminalOutline" color="#6366f1" :size="14" />
+              <NIcon :component="TerminalOutline" color="var(--color-primary)" :size="14" />
               <NText>{{ totalCommands }} commands executed</NText>
               <NTag v-if="importantCommands.length > 0" size="tiny" type="warning">
                 {{ importantCommands.length }} important
               </NTag>
-              <NText depth="3" style="font-size:11px;margin-left:auto;cursor:pointer;">
+              <NText depth="3" style="font-size: var(--font-size-2xs);margin-left:auto;cursor:pointer;">
                 {{ commandsExpanded ? '▾ collapse' : '▸ expand' }}
               </NText>
             </div>
@@ -180,7 +180,7 @@ onMounted(loadActivity)
           <!-- Files Changed -->
           <div v-if="totalFiles > 0" class="changed-section">
             <div class="changed-summary">
-              <NIcon :component="PricetagOutline" color="#22c55e" :size="14" />
+              <NIcon :component="PricetagOutline" color="var(--color-success)" :size="14" />
               <NText>{{ totalFiles }} files changed</NText>
             </div>
             <div class="file-list">
@@ -191,7 +191,7 @@ onMounted(loadActivity)
           <!-- Dependencies -->
           <div v-if="totalDeps > 0" class="changed-section">
             <div class="changed-summary">
-              <NIcon :component="CogOutline" color="#06b6d4" :size="14" />
+              <NIcon :component="CogOutline" color="var(--color-cyan)" :size="14" />
               <NText>+{{ totalDeps }} dependency change{{ totalDeps > 1 ? 's' : '' }}</NText>
             </div>
             <div class="dep-list">
@@ -200,7 +200,7 @@ onMounted(loadActivity)
                   {{ d.action === 'ADDED' ? '↑' : '↓' }}
                 </NTag>
                 <NText>{{ d.name }}</NText>
-                <NText v-if="d.version" depth="3" style="font-size:12px;">@{{ d.version }}</NText>
+                <NText v-if="d.version" depth="3" style="font-size: var(--font-size-xs);">@{{ d.version }}</NText>
               </div>
             </div>
           </div>
@@ -208,7 +208,7 @@ onMounted(loadActivity)
           <!-- Environment Changes -->
           <div v-if="totalEnvChanges > 0" class="changed-section">
             <div class="changed-summary">
-              <NIcon :component="CogOutline" color="#f59e0b" :size="14" />
+              <NIcon :component="CogOutline" color="var(--color-warning)" :size="14" />
               <NText>{{ totalEnvChanges }} environment change{{ totalEnvChanges > 1 ? 's' : '' }}</NText>
             </div>
             <div class="env-list">
@@ -217,7 +217,7 @@ onMounted(loadActivity)
                   {{ e.typeLabel }}
                 </NTag>
                 <NText>{{ e.name }}</NText>
-                <NText v-if="e.detail" depth="3" style="font-size:12px;">{{ e.detail }}</NText>
+                <NText v-if="e.detail" depth="3" style="font-size: var(--font-size-xs);">{{ e.detail }}</NText>
               </div>
             </div>
           </div>
@@ -225,14 +225,14 @@ onMounted(loadActivity)
           <!-- Incidents -->
           <div v-if="totalIncidents > 0" class="changed-section">
             <div class="changed-summary">
-              <NIcon :component="AlertCircleOutline" color="#f59e0b" :size="14" />
+              <NIcon :component="AlertCircleOutline" color="var(--color-warning)" :size="14" />
               <NText>{{ totalIncidents }} incident{{ totalIncidents > 1 ? 's' : '' }}</NText>
               <NTag v-if="activity.incidents.every((i: any) => i.resolved)" size="tiny" type="success">all resolved</NTag>
             </div>
             <div class="incident-list">
               <div v-for="(inc, i) in activity.incidents" :key="i" class="incident-card">
                 <NText strong>{{ inc.type }}</NText>
-                <NText depth="3" style="font-size:12px;">{{ inc.description }}</NText>
+                <NText depth="3" style="font-size: var(--font-size-xs);">{{ inc.description }}</NText>
                 <NSpace style="margin-top:4px">
                   <NTag v-if="inc.resolved" size="tiny" type="success">✅ {{ inc.resolvedBy || 'Resolved' }}</NTag>
                   <NTag v-else size="tiny" type="warning">⏳ unresolved</NTag>
@@ -245,17 +245,17 @@ onMounted(loadActivity)
         <!-- Right: Evidence -->
         <div class="ledger-col">
           <div class="col-header">
-            <NIcon :component="CheckmarkCircleOutline" color="#8b5cf6" :size="16" />
+            <NIcon :component="CheckmarkCircleOutline" color="var(--color-purple)" :size="16" />
             <NText strong>Evidence</NText>
           </div>
 
           <!-- Verifications -->
           <div v-if="totalVerifications > 0" class="evidence-section">
             <div v-for="(v, i) in activity.verifications" :key="i" class="evidence-item">
-              <NIcon :component="CheckmarkCircleOutline" :color="v.failed > 0 ? '#f59e0b' : '#22c55e'" :size="14" />
+              <NIcon :component="CheckmarkCircleOutline" :color="v.failed > 0 ? 'var(--color-warning)' : 'var(--color-success)'" :size="14" />
               <div class="evidence-content">
                 <NText>{{ v.type }}</NText>
-                <NText depth="3" style="font-size:12px;">
+                <NText depth="3" style="font-size: var(--font-size-xs);">
                   {{ v.passed }} passed{{ v.failed > 0 ? ', ' + v.failed + ' failed' : '' }}
                 </NText>
               </div>
@@ -265,18 +265,18 @@ onMounted(loadActivity)
           <!-- Agent Decisions -->
           <div v-if="totalDecisions > 0" class="evidence-section">
             <div class="evidence-subheader">
-              <NIcon :component="CogOutline" color="#ec4899" :size="14" />
-              <NText depth="2" style="font-size:12px;">Agent Decisions</NText>
+              <NIcon :component="CogOutline" color="var(--color-pink)" :size="14" />
+              <NText depth="2" style="font-size: var(--font-size-xs);">Agent Decisions</NText>
             </div>
             <div v-for="(d, i) in activity.agentDecisions" :key="i" class="evidence-item">
               <NTag size="tiny" type="info">{{ d.type }}</NTag>
-              <NText depth="2" style="font-size:12px;">{{ d.content }}</NText>
+              <NText depth="2" style="font-size: var(--font-size-xs);">{{ d.content }}</NText>
             </div>
           </div>
 
           <!-- No evidence -->
           <div v-if="totalVerifications === 0 && totalDecisions === 0" class="evidence-empty">
-            <NText depth="3" style="font-size:12px;">No verification evidence yet</NText>
+            <NText depth="3" style="font-size: var(--font-size-xs);">No verification evidence yet</NText>
           </div>
         </div>
       </div>
@@ -284,15 +284,15 @@ onMounted(loadActivity)
       <!-- Knowledge Candidates -->
       <div v-if="activeCandidates.length > 0" class="knowledge-section">
         <div class="knowledge-header">
-          <NIcon :component="BulbOutline" color="#f59e0b" :size="16" />
+          <NIcon :component="BulbOutline" color="var(--color-warning)" :size="16" />
           <NText strong>Knowledge Candidates</NText>
-          <NText depth="3" style="font-size:11px;">TeamMind detected patterns worth saving</NText>
+          <NText depth="3" style="font-size: var(--font-size-2xs);">TeamMind detected patterns worth saving</NText>
         </div>
         <div v-for="kc in activeCandidates" :key="kc.id" class="kc-card">
           <div class="kc-info">
             <NTag size="tiny" :type="kc.type === 'ADR' ? 'info' : 'success'">{{ kc.type }}</NTag>
-            <NText strong style="font-size:13px;">{{ kc.title }}</NText>
-            <NText depth="3" style="font-size:12px;">{{ kc.description }}</NText>
+            <NText strong style="font-size: var(--font-size-sm);">{{ kc.title }}</NText>
+            <NText depth="3" style="font-size: var(--font-size-xs);">{{ kc.description }}</NText>
           </div>
           <NSpace>
             <NButton size="tiny" type="primary" @click="saveCandidate(kc)">
@@ -309,7 +309,7 @@ onMounted(loadActivity)
       <!-- Empty state -->
       <NEmpty
         v-if="!loading && !error && totalCommands === 0 && totalFiles === 0 && totalIncidents === 0"
-        description="暂无执行活动数据（该任务可能尚未产生事件记录）"
+        description="暂无执行活动数据"
       />
     </div>
   </NSpin>
@@ -317,7 +317,7 @@ onMounted(loadActivity)
 
 <style scoped>
 .empty-hint { padding: 60px 0; display: flex; justify-content: center; }
-.error-box { display: flex; align-items: center; gap: 8px; padding: 16px; color: #ef4444; }
+.error-box { display: flex; align-items: center; gap: 8px; padding: 16px; color: var(--color-error); }
 .ledger { display: flex; flex-direction: column; gap: 12px; }
 
 /* Summary cards */
@@ -327,8 +327,8 @@ onMounted(loadActivity)
   gap: 12px;
 }
 .summary-card { text-align: center; cursor: default; }
-.summary-num { font-size: 24px; font-weight: 700; color: #e2e8f0; line-height: 1.2; }
-.summary-label { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.summary-num { font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-text-primary); line-height: 1.2; }
+.summary-label { font-size: var(--font-size-2xs); color: var(--color-text-secondary); margin-top: 4px; }
 
 /* Two-column layout */
 .ledger-columns {
@@ -346,7 +346,7 @@ onMounted(loadActivity)
   align-items: center;
   gap: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #3a3a5c;
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* What Changed sections */
@@ -359,7 +359,7 @@ onMounted(loadActivity)
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   padding: 4px 0;
 }
@@ -371,31 +371,31 @@ onMounted(loadActivity)
   align-items: center;
   gap: 8px;
   padding: 3px 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 .cmd-important {
-  background: #f59e0b11;
+  background: var(--color-warning)11;
   border-radius: 4px;
   padding: 3px 6px;
 }
 .exit-tag { flex-shrink: 0; width: 28px; text-align: center; }
 .cmd-text {
   font-family: monospace;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
 }
-.cmd-duration { font-size: 11px; flex-shrink: 0; }
+.cmd-duration { font-size: var(--font-size-2xs); flex-shrink: 0; }
 
 /* Files */
 .file-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .file-tag {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-family: monospace;
-  background: #2a2a3e;
-  color: #94a3b8;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -405,12 +405,12 @@ onMounted(loadActivity)
 
 /* Environment */
 .env-list { display: flex; flex-direction: column; gap: 2px; }
-.env-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+.env-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: var(--font-size-sm); }
 
 /* Incidents */
 .incident-list { display: flex; flex-direction: column; gap: 8px; }
 .incident-card {
-  background: #2a2a3e;
+  background: var(--color-bg-surface);
   border-radius: 8px;
   padding: 8px 12px;
 }
@@ -435,7 +435,7 @@ onMounted(loadActivity)
 /* Knowledge Candidates */
 .knowledge-section {
   margin-top: 8px;
-  border-top: 1px solid #3a3a5c;
+  border-top: 1px solid var(--color-border);
   padding-top: 12px;
 }
 .knowledge-header {
@@ -449,8 +449,8 @@ onMounted(loadActivity)
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #1e1e2e;
-  border: 1px solid #3a3a5c;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 12px;
   margin-bottom: 8px;

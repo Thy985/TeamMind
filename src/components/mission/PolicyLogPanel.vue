@@ -31,10 +31,10 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const severityColors: Record<string, string> = {
-  CRITICAL: '#ef4444',
-  HIGH: '#f59e0b',
-  MEDIUM: '#3b82f6',
-  LOW: '#64748b'
+  CRITICAL: 'var(--color-error)',
+  HIGH: 'var(--color-warning)',
+  MEDIUM: 'var(--color-info)',
+  LOW: 'var(--color-text-tertiary)'
 }
 
 const criticalCount = computed(() => props.findings.filter(f => f.severity === 'CRITICAL' && !f.resolved).length)
@@ -61,45 +61,45 @@ const pendingApprovals = computed(() => props.approvalRequests.filter(a => !a.gr
     <!-- Critical Findings -->
     <div v-if="criticalCount > 0" class="finding-group">
       <div class="finding-header">
-        <NIcon :component="AlertCircleOutline" color="#ef4444" :size="14" />
-        <NText strong style="color:#ef4444;font-size:12px;">
+        <NIcon :component="AlertCircleOutline" color="var(--color-error)" :size="14" />
+        <NText strong style="color:var(--color-error);font-size: var(--font-size-xs);">
           CRITICAL ({{ criticalCount }})
         </NText>
       </div>
       <div v-for="f in findings.filter(f => f.severity === 'CRITICAL' && !f.resolved)" :key="f.id" class="finding-item critical">
-        <NText style="font-size:12px;">{{ f.description }}</NText>
+        <NText style="font-size: var(--font-size-xs);">{{ f.description }}</NText>
       </div>
     </div>
 
     <!-- High Findings -->
     <div v-if="highCount > 0" class="finding-group">
       <div class="finding-header">
-        <NIcon :component="AlertCircleOutline" color="#f59e0b" :size="14" />
-        <NText strong style="color:#f59e0b;font-size:12px;">
+        <NIcon :component="AlertCircleOutline" color="var(--color-warning)" :size="14" />
+        <NText strong style="color:var(--color-warning);font-size: var(--font-size-xs);">
           HIGH ({{ highCount }})
         </NText>
       </div>
       <div v-for="f in findings.filter(f => f.severity === 'HIGH' && !f.resolved)" :key="f.id" class="finding-item high">
-        <NText style="font-size:12px;">{{ f.description }}</NText>
+        <NText style="font-size: var(--font-size-xs);">{{ f.description }}</NText>
       </div>
     </div>
 
     <!-- All Findings Table -->
     <div v-if="findings.length > 0" class="findings-table">
       <div class="finding-header">
-        <NIcon :component="ShieldCheckmarkOutline" :size="14" color="#6366f1" />
-        <NText strong style="font-size:12px;color:#6366f1;">All Findings</NText>
+        <NIcon :component="ShieldCheckmarkOutline" :size="14" color="var(--color-primary)" />
+        <NText strong style="font-size: var(--font-size-xs);color:var(--color-primary);">All Findings</NText>
       </div>
       <div v-for="f in findings" :key="f.id" class="finding-item" :class="{ resolved: f.resolved }">
         <NTag :color="severityColors[f.severity]" size="tiny" style="background:transparent;color:inherit;border:1px solid currentColor;padding:0 4px;">
           {{ f.severity }}
         </NTag>
-        <NText style="font-size:12px;flex:1;">{{ f.description }}</NText>
+        <NText style="font-size: var(--font-size-xs);flex:1;">{{ f.description }}</NText>
         <NIcon
           v-if="f.resolved"
           :component="CheckmarkCircleOutline"
           size="14"
-          color="#22c55e"
+          color="var(--color-success)"
         />
       </div>
     </div>
@@ -133,12 +133,12 @@ const pendingApprovals = computed(() => props.approvalRequests.filter(a => !a.gr
   margin-bottom: 2px;
 }
 .finding-item.critical {
-  background: #ef444422;
-  border-left: 2px solid #ef4444;
+  background: var(--color-error)22;
+  border-left: 2px solid var(--color-error);
 }
 .finding-item.high {
-  background: #f59e0b22;
-  border-left: 2px solid #f59e0b;
+  background: var(--color-warning)22;
+  border-left: 2px solid var(--color-warning);
 }
 .finding-item.resolved {
   opacity: 0.5;

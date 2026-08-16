@@ -118,8 +118,8 @@ onMounted(loadProjects)
   <div class="project-page">
     <div class="page-header">
       <div>
-        <NText strong style="font-size:20px;">Projects</NText>
-        <NText depth="3" style="font-size:13px;margin-left:12px;">管理你的 AI 协作项目</NText>
+        <NText strong style="font-size: var(--font-size-xl);">Projects</NText>
+        <NText depth="3" style="font-size: var(--font-size-sm);margin-left:12px;">管理你的 AI 协作项目</NText>
       </div>
       <NSpace>
         <NButton size="small" @click="loadProjects" :loading="loading">
@@ -183,10 +183,10 @@ onMounted(loadProjects)
                   <NTag size="tiny" :type="entry.processAlive ? 'success' : 'error'">
                     {{ entry.processAlive ? '运行中' : '已停止' }}
                   </NTag>
-                  <NText v-if="entry.pid" depth="3" style="font-size:11px;">PID: {{ entry.pid }}</NText>
-                  <NText v-if="entry.command" depth="3" style="font-size:11px;">{{ entry.command }}</NText>
+                  <NText v-if="entry.pid" depth="3" style="font-size: var(--font-size-2xs);">PID: {{ entry.pid }}</NText>
+                  <NText v-if="entry.command" depth="3" style="font-size: var(--font-size-2xs);">{{ entry.command }}</NText>
                 </NSpace>
-                <NText v-if="entry.health" depth="2" style="font-size:12px;margin-top:4px;display:block;">
+                <NText v-if="entry.health" depth="2" style="font-size: var(--font-size-xs);margin-top:4px;display:block;">
                   {{ entry.health }}
                 </NText>
               </div>

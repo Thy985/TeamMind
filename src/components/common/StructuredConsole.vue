@@ -123,7 +123,7 @@ function formatTime(timestamp: string) {
       
       <NEmpty 
         v-else 
-        description="No logs to display"
+        description="暂无日志记录"
         style="padding: 40px 0"
       />
     </NScrollbar>
@@ -177,7 +177,7 @@ function formatTime(timestamp: string) {
 }
 
 .log-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 .log-message {

@@ -57,7 +57,7 @@ const performanceGrade = computed(() => {
 // 性能状态颜色
 const performanceColor = computed(() => {
   const grade = performanceGrade.value
-  if (grade === 'A') return '#10b981'
+  if (grade === 'A') return '#22c55e'
   if (grade === 'B') return '#3b82f6'
   if (grade === 'C') return '#f59e0b'
   if (grade === 'D') return '#ef4444'
@@ -114,7 +114,7 @@ function handleExport() {
             :percentage="Math.min(100, stats.avgResponseTime / 20)" 
             :show-indicator="false"
             :height="4"
-            :color="stats.avgResponseTime > 1000 ? '#ef4444' : '#10b981'"
+            :color="stats.avgResponseTime > 1000 ? '#ef4444' : '#22c55e'"
           />
         </NCard>
       </NGi>
@@ -133,7 +133,7 @@ function handleExport() {
             :percentage="Math.min(100, stats.avgRenderTime / 2)" 
             :show-indicator="false"
             :height="4"
-            :color="stats.avgRenderTime > 100 ? '#ef4444' : '#10b981'"
+            :color="stats.avgRenderTime > 100 ? '#ef4444' : '#22c55e'"
           />
         </NCard>
       </NGi>
@@ -152,7 +152,7 @@ function handleExport() {
             :percentage="Math.min(100, stats.memoryUsage / 10)" 
             :show-indicator="false"
             :height="4"
-            :color="stats.memoryUsage > 500 ? '#ef4444' : '#10b981'"
+            :color="stats.memoryUsage > 500 ? '#ef4444' : '#22c55e'"
           />
         </NCard>
       </NGi>
@@ -171,7 +171,7 @@ function handleExport() {
             :percentage="stats.errorRate" 
             :show-indicator="false"
             :height="4"
-            :color="stats.errorRate > 5 ? '#ef4444' : '#10b981'"
+            :color="stats.errorRate > 5 ? '#ef4444' : '#22c55e'"
           />
         </NCard>
       </NGi>
@@ -230,24 +230,24 @@ function handleExport() {
 }
 
 .score-grade {
-  font-size: 48px;
+  font-size: var(--font-size-4xl);
   font-weight: bold;
   line-height: 1;
 }
 
 .score-value {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   margin-top: 4px;
 }
 
 .score-info h3 {
   margin: 0 0 8px 0;
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
 }
 
 .score-info p {
   margin: 0;
-  color: #6b7280;
+  color: var(--color-text-tertiary);
 }
 
 .metrics-grid {
@@ -266,7 +266,7 @@ function handleExport() {
   align-items: center;
   justify-content: center;
   margin-bottom: 12px;
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
 }
 
 .metric-content {
@@ -274,13 +274,13 @@ function handleExport() {
 }
 
 .metric-label {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: var(--font-size-base);
+  color: var(--color-text-tertiary);
   margin-bottom: 4px;
 }
 
 .metric-value {
-  font-size: 24px;
+  font-size: var(--font-size-2xl);
   font-weight: bold;
 }
 
@@ -299,7 +299,7 @@ function handleExport() {
 
 .recommendations-list li {
   margin-bottom: 8px;
-  color: #6b7280;
+  color: var(--color-text-tertiary);
 }
 
 .actions {
