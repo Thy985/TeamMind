@@ -53,8 +53,8 @@ user.email = 1850833838@qq.com
 - **Phase 1B** ✅ Single-Agent Runtime (commit `7db54c0f`)
 - **Phase 1C** ✅ Multi-Agent + Event Store + Mission Control (commits `39eb543f` → `5deec127`)
 - **Phase 2** ✅ Mission Control live integration (commits `afba917c` → `c28bef85`)
-- **Phase 3** ✅ CLI Platform + Recovery Hardening + Real Pipeline (commits `e161c5b2` → `12497d03`)
-- **Phase 3+** ✅ Replace simulateAgentExecution with real plugin.invoke() (commit pending)
+- **Phase 3** ✅ CLI Platform + Recovery Hardening + Real Pipeline (commits `e161c5b2` → `25e4a373`)
+- **Next: Execution Ledger** — Phase 4 plan in `.agents/product/execution-ledger-product-assessment.md`
 
 ## 测试基线
 
