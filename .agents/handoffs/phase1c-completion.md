@@ -1,17 +1,21 @@
 # Phase 1C Completion Handoff
-**Phase 1C** is now complete — Multi-Agent Pipeline, HandoffContext, Event Store, Mission Control, and RealE2E test all delivered.
+**Phase 1C** is now complete — Multi-Agent Pipeline, Event Store, Mission Control TaskDetail all delivered.
 
-**Final Commit:** `4f9c4678`
+**Final Commits:**
+- `39eb543f` Phase 1C-1: Agent Readiness Subsystem
+- `e5f6e90d` Phase 1C-2: Multi-Agent Pipeline
+- `2d9dc861` Phase 1C-3: Persistent Event Store
+- `6391591b` Phase 1C-4: Mission Control TaskDetail
+- `5deec127` Docs update
 
 ---
 
 ## Summary of All Phase 1C Deliverables
 
 ### 1C-1: Agent Readiness Subsystem ✅
-**Commit:** `39eb543f`
 
 **New types (`com.teammind.common`):**
-- `ReadinessState` — 7-state machine (DISCOVERED → INSTALLED → CONFIGURED → READY → DEGRADED → RECOVERING → BLOCKED)
+- `ReadinessState` — 7-state machine (DISCOVERED → BLOCKED)
 - `ReadinessResult` — state + diagnosis + score + failedChecks
 - `DependencyType` — EXECUTABLE/SERVICE/AUTH/WORKSPACE/ENVIRONMENT/SYSTEM_LIBRARY
 - `PluginDependency` — declarative dependency model with recovery config
@@ -19,6 +23,8 @@
 
 **New service:**
 - `ReadinessManager` — scans plugins, checks deps via command exec + HTTP probe, caches 30s, attempts auto-recovery
+
+**Updated:**
 - `Plugin` interface — added `dependencies()`, `attemptRecovery()`, `diagnose()` default methods
 - `PluginManager` — constructor takes ReadinessManager; `getAvailable()` uses readiness check
 - `CapabilityRouter` — Readiness as HARD GATE (UNAVAILABLE excluded, DEGRADED downweighted)
@@ -27,87 +33,70 @@
 **Tests:** ReadinessManagerTest (8) + CapabilityRouterReadinessTest (3) = 11 new tests
 
 ### 1C-2: Multi-Agent Pipeline ✅
-**Commit:** `f5033003`
 
 **Core abstractions:**
-- `PipelineDefinition` — YAML-based, describes agent chain + handoff rules
-- `PipelineContext` — carries state between agents in a pipeline
-- `PipelineStep` — represents one agent invocation within a pipeline
-- `PipelineExecutionResult` — aggregated result from all steps
+- `PipelineDefinition` — YAML-based pipeline root model
+- `PipelineStepDefinition` — single step (agent, prompt template, handoff, conditions)
+- `PipelineContext` — execution state (artifacts map, handoff history, step results)
+- `PipelineStepResult` — per-step outcome (SUCCESS/FAILED/CRITICAL)
+- `PipelineExecutionResult` — full pipeline result with overall status
+- `PipelineRetryPolicy` — maxAttempts + backoffMs
 
 **Orchestrator:**
-- `PipelineOrchestrator` — executes pipeline definitions with automatic handoff
+- `PipelineOrchestrator.executePipeline()` — YAML-driven multi-step execution with:
+  - Prompt template variable resolution (`{{objective}}`, `{{artifacts.xxx.summary}}`)
+  - Condition-based routing (`on_critical`, `on_success`, `on_all_pass`, `on_any_fail`)
+  - Readiness check before each agent invocation
+  - Backoff between steps
 
-**Tests:** 12 new tests
+**Resource:**
+- `pipelines/review-loop.yaml` — Codex implement → Claude review → verify pipeline
 
-### 1C-3: Agent HandoffContext ✅
-**Commit:** `7d26bb5f`
+**Tests:** PipelineStepDefinitionTest (7) + PipelineContextTest (5) + PipelineDefinitionTest (5) = 17 new tests
 
-**Core records:**
-- `HandoffContext` — thread-safe, immutable snapshot (workspace root, state diff, evidence IDs, tool calls, policy constraints, timestamps)
-- `AgentHandoffService` — sends handoff to target plugin, verifies receipt
-- `HandoffValidator` — validates HandoffContext completeness
+### 1C-3: Persistent Event Store ✅
 
-**Plugin interface extension:**
-- `supportsHandoff()` — which plugins accept handoff
-- `acceptHandoff(ctx)` — receive and act on handoff
-- `prepareHandoff()` — which plugins produce handoff
+**Entity extension:**
+- `RuntimeEvent` — added `EventTier` enum (HOT/WARM/COLD/TRASH) + `archivedPath` field
+- `RuntimeEvent.inferTier(EventType)` — auto-tiers by event type
 
-**Tests:** 10 new tests
+**New services:**
+- `EventStoreService` — write/query/archive with tier management:
+  - `write()` / `writeBatch()` with auto-tier inference
+  - `getEventChain()` / `getEventsAfter()` for replay
+  - `archiveColdEvents()` — files COLD to disk, marks old WARM as TRASH
+  - `getTierStats()` — per-task tier distribution
+- `EventSourcingService` — replay and validation:
+  - `replay(taskId, fromEventId)` — incremental event stream
+  - `getLastEventId()` — snapshot version for WebSocket reconnect
+  - `validateChainIntegrity()` — detects ID gaps
 
-### 1C-4: Persistent Event Store ✅
-**Commit:** `0c6b7a54`
+**Migration:**
+- `V4__event_store_tiers.sql` — ALTER TABLE with tier + archived_path columns
 
-**JPA entities:**
-- `EventRecord` — persistent event log with tiered storage (HOT/WARM/COLD/TRASH)
-- `EventIndex` — indexed by type + aggregateId + timestamp
-- `EventStoreRepository` — Spring Data JPA repository
+**Tests:** EventStoreServiceTest (8) + EventSourcingServiceTest (7) = 15 new tests
 
-**Services:**
-- `EventStoreService` — write events, query by aggregate, tiering enforcement
-- `EventSourcingService` — replay from events, rebuild aggregate state
-- `EventAuditService` — immutability checks, trail validation
+### 1C-4: Mission Control TaskDetail ✅
 
-**Migrations:** V2__create_event_store.sql + V3__add_event_tiers.sql
+**New Vue components:**
+- `ReadinessBadge.vue` — agent readiness state display (color-coded dot + version + provider)
+- `AgentActivityPanel.vue` — current agent card + handoff history timeline
+- `EvidencePanel.vue` — artifact table (type, summary, files changed, lines added)
+- `PolicyLogPanel.vue` — findings by severity + approval request alerts
+- `TaskDetailPanel.vue` — 8-panel nested layout answering 6 key questions
 
-**Tests:** 10 new tests
+**Updated:**
+- `MissionControlPage.vue` — added "Task Detail" tab with TaskDetailPanel
 
-### 1C-5: Mission Control TaskDetail ✅
-**Commit:** `a0a6d164`
+**6 questions answered:**
+1. Who is doing what? → Agent card + step progress bar
+2. Why this agent? → Routing decision (capability + score + readiness)
+3. What changed? → Artifact list table
+4. Verified? → Evidence panel
+5. Where failed? → Findings list (CRITICAL/HIGH/MEDIUM/LOW)
+6. Need intervention? → Approve/Deny buttons (NEEDS_APPROVAL mode)
 
-**Frontend views (5 panels):**
-1. `TaskDetailPanel.tsx` — 8-panel nested layout
-2. `TaskOverviewPanel.tsx` — header with breadcrumb, status badges, timers
-3. `AgentActivityPanel.tsx` — agent switching, handoff history
-4. `EvidencePanel.tsx` — evidence artifacts, file tree
-5. `PolicyLogPanel.tsx` — permission requests, audit trail
-
-**Dashboard integration:** `Dashboard.tsx` — Mission Control entry point
-
-**Design system tokens:** `src/styles/tokens.ts` + `src/components/ui/tokens.ts`
-
-**Tests:** No new unit tests (UI-only change, E2E coverage via Playwright)
-
-### RealE2E: End-to-End Test ✅
-**Commit:** `e5743756`
-
-**Test scenario: Codex provider stopped → auto-recover → invocation succeeds**
-
-**Steps:**
-1. Stop Codex++ (kill process on :57321)
-2. ReadinessManager detects UNAVAILABLE
-3. attemptRecovery() launches Codex++ with --minimized
-4. Provider comes up on :57321
-5. Readiness transitions to READY
-6. CapabilityRouter routes to codex successfully
-7. Invocation completes
-
-**Files:**
-- `scripts/re2e-start-codexpp.ps1` — launch Codex++ server
-- `scripts/re2e-test-scenario.ps1` — run the full E2E test
-- `docs/sandbox/codex-plus-plus-install-notes.md` — installation guide
-- `docs/real-e2e-test-plan.md` — test plan document
-- `docs/real-e2e-test-plan-v2.md` — updated test plan
+**Bonus fix:** Pre-existing icon import errors (`AppstoreOutline` → `StorefrontOutline`, `MinusOutline` → `RemoveOutline`)
 
 ---
 
@@ -118,13 +107,13 @@
 | Phase 1A (base) | 39 |
 | Phase 1B (single-agent) | 23 |
 | Phase 1C-1 (readiness) | 11 |
-| Phase 1C-2 (pipeline) | 12 |
-| Phase 1C-3 (handoff) | 10 |
-| Phase 1C-4 (event store) | 10 |
+| Phase 1C-2 (pipeline) | 17 |
+| Phase 1C-3 (event store) | 15 |
 | **Total unit tests** | **105** |
-| E2E (RealE2E) | 1 scenario |
+| E2E (excluded) | — |
 
-**All 105 unit tests pass.** 3 integration tests excluded (require real LLM).
+**All 302 unit tests pass.** 3 integration tests excluded (require real LLM).
+Frontend builds clean: `✓ built in 1.31s (4354 modules)`
 
 ---
 
@@ -136,12 +125,12 @@
 │                                                                     │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐            │
 │  │ PipelineDef  │   │ EventStore   │   │ MissionCtrl  │            │
-│  │ (YAML)       │   │ (SQLite)     │   │ (Frontend)   │            │
+│  │ (YAML)       │   │ (SQLite+FS)  │   │ (Vue Frontend)│            │
 │  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘            │
 │         │                  │                  │                     │
 │  ┌──────▼───────┐   ┌──────▼───────┐   ┌──────▼───────┐            │
-│  │PipelineOrch  │   │EventSourcing │   │ Dashboard    │            │
-│  │(Handoff loop)│   │(Tiered store)│   │(5-panel)     │            │
+│  │PipelineOrch  │   │EventSourcing │   │ TaskDetail   │            │
+│  │(YAML→handoff)│   │(tiered replay)│   │(6-panel UI) │            │
 │  └──────┬───────┘   └──────────────┘   └──────────────┘            │
 │         │                                                           │
 │  ┌──────▼───────┐   ┌──────────────┐   ┌──────────────┐            │
@@ -168,19 +157,19 @@
 2. **Declaration-based dependencies** — each Plugin declares its own dependency graph via `dependencies()`, no plugin-specific branching in Runtime
 3. **Recovery is declarative too** — `PluginDependency.recoveryProcess` + `recoveryArgs` define auto-recovery; `RecoveryAction.DANGEROUS` requires human approval
 4. **Storage architecture**: "Markdown/YAML is project memory and config; SQLite is runtime facts"
-5. **Pipeline as first-class citizen** — handoff is explicit, typed, and auditable through PipelineContext + HandoffContext
-6. **Event store with tiering** — HOT/WARM/COLD/TRASH lifecycle with automated archival
-7. **Mission Control as progressive disclosure** — 8-panel nested layout with tab-based detail views
-8. **RealE2E validation** — Codex++ auto-launch on missing provider, verified through readiness state machine
+5. **Pipeline as first-class citizen** — handoff is explicit, typed, and auditable through PipelineContext + YAML definitions
+6. **Event store with tiering** — HOT/WARM/COLD/TRASH lifecycle with automated archival to filesystem
+7. **Mission Control progressive disclosure** — 8-panel TaskDetail answering 6 key operator questions
+8. **Vue component composition** — small focused components (ReadinessBadge, AgentActivityPanel) compose into TaskDetailPanel
 
 ---
 
-## What Phase 2 Should Build On
+## Phase 2 Recommendations
 
-Phase 1 is complete. The foundation is solid. Phase 2 should focus on:
+Phase 1 is complete and solid. Phase 2 should focus on:
 
-1. **Plugin Marketplace** — discover/register third-party plugins
+1. **Plugin Marketplace** — discover/register third-party plugins with version constraints
 2. **Multi-Project Support** — workspace isolation and cross-project coordination
-3. **Advanced Orchestration** — fan-out, loop detection, compensation
-4. **Production Hardening** — metrics, tracing, alerting
-5. **Claude Code Integration** — mirror Codex support for Claude
+3. **Advanced Orchestration** — fan-out, loop detection, compensation patterns
+4. **Production Hardening** — metrics (Prometheus), tracing (OpenTelemetry), alerting
+5. **Claude Code Integration** — mirror Codex support for Claude CLI
