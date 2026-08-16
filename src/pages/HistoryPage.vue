@@ -5,6 +5,7 @@ import { NCard, NDataTable, NButton, NSpace, NTag, NInput, NSelect, NEmpty, NIco
 import { PlayOutline, TrashOutline, CopyOutline, SearchOutline } from '@vicons/ionicons5'
 import type { DataTableColumns } from 'naive-ui'
 import type { MissionHistory } from '@/types'
+import { missionApi } from '@/api/axios'
 
 const router = useRouter()
 
@@ -104,39 +105,19 @@ function deleteMission(id: string) {
 // Fetch data
 onMounted(async () => {
   loading.value = true
-  // TODO: Fetch from API
-  
-  // Mock data
-  history.value = [
-    {
-      id: '1',
-      title: 'Code review for authentication module',
-      status: 'completed',
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      completedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '2',
-      title: 'Analyze user engagement metrics',
-      status: 'running',
-      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '3',
-      title: 'Generate API documentation',
-      status: 'failed',
-      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      completedAt: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '4',
-      title: 'Data pipeline ETL task',
-      status: 'completed',
-      createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-      completedAt: new Date(Date.now() - 47 * 60 * 60 * 1000).toISOString()
-    }
-  ]
-  
+  try {
+    const res = await missionApi.list(1, 20)
+    const items = (res as any)?.data?.items || (res as any)?.data || []
+    history.value = items.map((m: any) => ({
+      id: m.id,
+      title: m.title,
+      status: m.status === 'completed' ? 'completed' : m.status === 'running' ? 'running' : m.status === 'failed' ? 'failed' : 'paused',
+      createdAt: m.createdAt,
+      completedAt: m.completedAt
+    }))
+  } catch (e) {
+    console.error('Failed to load history:', e)
+  }
   loading.value = false
 })
 </script>

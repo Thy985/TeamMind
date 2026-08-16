@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { NList, NListItem, NTag, NIcon, NSpace, NText, NButton, NSpin } from 'naive-ui'
+import { ref, computed } from 'vue'
+import { NCard, NGrid, NGi, NTag, NIcon, NText, NSpace, NSpin, NEmpty, NButton, useMessage } from 'naive-ui'
 import { 
-  PlayOutline, CheckmarkCircleOutline, CloseCircleOutline, 
-  TimeOutline, RefreshOutline, AlertCircleOutline
+  PlayOutline, CheckmarkCircleOutline, CloseCircleOutline,
+  TimeOutline, RefreshOutline, AlertCircleOutline, FolderOutline
 } from '@vicons/ionicons5'
 import { missionControlApi } from '@/api/axios'
+import type { MissionHistory } from '@/types'
 
 interface Props {
   projectId: string
 }
 const props = defineProps<Props>()
 
-const runningTasks = ref<any[]>([])
-const historyTasks = ref<any[]>([])
+const emit = defineEmits<{
+  'task-selected': [taskId: string]
+}>()
+
+const runningTasks = ref<MissionHistory[]>([])
+const historyTasks = ref<MissionHistory[]>([])
 const loading = ref(true)
+const message = useMessage()
 
 const stateColors: Record<string, { color: string; bg: string }> = {
   ORCHESTRATING: { color: '#6366f1', bg: '#6366f122' },
@@ -33,21 +39,21 @@ async function refresh() {
       missionControlApi.runningTasks(props.projectId),
       missionControlApi.history(props.projectId, 10)
     ])
-    runningTasks.value = running || []
-    historyTasks.value = history || []
+    runningTasks.value = (running as any) || []
+    historyTasks.value = (history as any) || []
+  } catch (e) {
+    console.error('Failed to load tasks:', e)
+    message.error('加载任务列表失败')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
-  refresh()
-  // Auto-refresh every 5 seconds for live updates
-  const interval = setInterval(refresh, 5000)
-  return () => clearInterval(interval)
-})
+function selectTask(taskId: string) {
+  emit('task-selected', taskId)
+}
 
-const formatDuration = (ms: number | null) => {
+function formatDuration(ms: number | null) {
   if (!ms) return '—'
   if (ms < 60000) return `${Math.round(ms / 1000)}s`
   return `${Math.round(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`
@@ -68,27 +74,25 @@ const formatDuration = (ms: number | null) => {
       </div>
       <div class="panel-body">
         <NList v-if="runningTasks.length > 0">
-          <NListItem v-for="task in runningTasks" :key="task.id">
+          <NListItem v-for="task in runningTasks" :key="task.id" class="task-item" @click="selectTask(task.id)">
             <template #prefix>
-              <NTag 
-                :color="stateColors[task.state]?.bg ?? '#3a3a5c'" 
-                :border-color="stateColors[task.state]?.color ?? '#3a3a5c'"
-                :text-color="stateColors[task.state]?.color ?? '#94a3b8'"
+              <NTag
+                :color="{ color: stateColors[task.state]?.bg ?? '#3a3a5c', borderColor: stateColors[task.state]?.color ?? '#3a3a5c', textColor: stateColors[task.state]?.color ?? '#94a3b8' }"
                 size="small"
               >
-                {{ task.state }}
+                {{ task.state ?? task.status }}
               </NTag>
             </template>
             <div class="task-info">
-              <NText depth="2" style="font-size: 13px">{{ task.objective ?? 'Untitled' }}</NText>
+              <NText depth="2" style="font-size: 13px">{{ task.title ?? 'Untitled' }}</NText>
               <NSpace size="small" style="margin-top: 4px">
                 <NText depth="3" style="font-size: 11px">
                   <NIcon :component="TimeOutline" size="12" />
-                  {{ task.currentAgentId ?? '?' }} · {{ task.currentRole ?? '?' }}
+                  {{ formatDuration((task as any).durationMs) }}
                 </NText>
-                <NText depth="3" style="font-size: 11px">重试 {{ task.retryCount ?? 0 }} 次</NText>
               </NSpace>
             </div>
+            <NIcon :component="PlayOutline" color="#6366f1" size="16" style="flex-shrink:0" />
           </NListItem>
         </NList>
         <NEmpty v-else description="当前没有执行中的任务" style="padding: 40px 0" />
@@ -105,27 +109,23 @@ const formatDuration = (ms: number | null) => {
       </div>
       <div class="panel-body">
         <NList v-if="historyTasks.length > 0">
-          <NListItem v-for="task in historyTasks.slice(0, 8)" :key="task.id">
+          <NListItem v-for="task in historyTasks.slice(0, 8)" :key="task.id" class="task-item" @click="selectTask(task.id)">
             <template #prefix>
-              <NIcon 
-                :component="task.state === 'DONE' ? CheckmarkCircleOutline : CloseCircleOutline" 
-                :color="task.state === 'DONE' ? '#22c55e' : '#ef4444'" 
+              <NIcon
+                :component="task.state === 'DONE' || task.status === 'completed' ? CheckmarkCircleOutline : CloseCircleOutline"
+                :color="task.state === 'DONE' || task.status === 'completed' ? '#22c55e' : '#ef4444'"
               />
             </template>
             <div class="task-info">
-              <NText depth="2" style="font-size: 13px">{{ task.objective ?? 'Untitled' }}</NText>
+              <NText depth="2" style="font-size: 13px">{{ task.title ?? 'Untitled' }}</NText>
               <NSpace size="small" style="margin-top: 4px">
                 <NTag size="tiny" :color="stateColors[task.state]?.bg ?? '#3a3a5c'" :text-color="stateColors[task.state]?.color ?? '#94a3b8'">
-                  {{ task.state }}
+                  {{ task.state ?? task.status }}
                 </NTag>
-                <NText depth="3" style="font-size: 11px">
-                  {{ task.currentAgentId ?? '?' }}
-                </NText>
-                <NText depth="3" style="font-size: 11px">
-                  {{ formatDuration(task.durationMs) }}
-                </NText>
+                <NText depth="3" style="font-size: 11px">{{ formatDuration((task as any).durationMs) }}</NText>
               </NSpace>
             </div>
+            <NIcon :component="PlayOutline" color="#6366f1" size="16" style="flex-shrink:0" />
           </NListItem>
         </NList>
         <NEmpty v-else description="暂无执行记录" style="padding: 40px 0" />
@@ -171,18 +171,16 @@ const formatDuration = (ms: number | null) => {
   padding: 8px;
 }
 
+.task-item {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.task-item:hover {
+  background: #252538;
+}
+
 .task-info {
   flex: 1;
   min-width: 0;
-}
-
-:deep(.n-list-item) {
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin-bottom: 4px;
-}
-
-:deep(.n-list-item:hover) {
-  background: #252538;
 }
 </style>

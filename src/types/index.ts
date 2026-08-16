@@ -189,7 +189,7 @@ export interface AppSettings {
 // ==================== WebSocket 事件 ====================
 
 /** WebSocket 事件类型（对齐后端 WSEvent 常量） */
-export type WSEventType = 
+export type WSEventType =
   // 后端 WSEvent 标准事件
   | 'mission_started'
   | 'mission_completed'
@@ -202,6 +202,10 @@ export type WSEventType =
   | 'resolution_resolved'
   | 'evolution_triggered'
   | 'evolution_completed'
+  | 'state_update'
+  | 'approval_required'
+  | 'pipeline_step_started'
+  | 'pipeline_step_completed'
   // 遗留/兼容事件
   | 'mission_updated'
   | 'ping'

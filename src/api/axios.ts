@@ -270,6 +270,9 @@ export const taskDetailApi = {
     return api.get(`/tasks/${taskId}/events${params}`)
   },
 
+  // Execution Ledger / Activity summary
+  getActivity: (taskId: string) => api.get(`/tasks/${taskId}/activity`),
+
   // Control actions
   pause: (taskId: string) => api.post(`/tasks/${taskId}/pause`),
   resume: (taskId: string) => api.post(`/tasks/${taskId}/resume`),

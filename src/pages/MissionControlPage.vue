@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { NCard, NSpace, NTag, NP, NText, NIcon, NButton, NSpin, NEmpty, NTabs, NTabPane, NModal, NForm, NFormItem, NSelect, NDivider } from 'naive-ui'
-import { 
-  PlayOutline, PauseCircleOutline, TimeOutline, CheckmarkCircleOutline, 
+import {
+  PlayOutline, PauseCircleOutline, TimeOutline, CheckmarkCircleOutline,
   WarningOutline, TrendingUpOutline, TrendingDownOutline, RefreshOutline,
-  AnalyticsOutline, StorefrontOutline, AlertCircleOutline, SettingsOutline
+  AnalyticsOutline, StorefrontOutline, AlertCircleOutline, SettingsOutline,
+  DocumentTextOutline
 } from '@vicons/ionicons5'
 import { missionControlApi } from '@/api/axios'
 import Panel1Overview from '@/components/mission/Panel1ProjectOverview.vue'
@@ -12,6 +13,7 @@ import Panel2Live from '@/components/mission/Panel2LiveExecution.vue'
 import Panel3Performance from '@/components/mission/Panel3PerformanceProfile.vue'
 import Panel4Recommendations from '@/components/mission/Panel4Recommendations.vue'
 import TaskDetailPanel from '@/components/mission/TaskDetailPanel.vue'
+import ActivityLedgerPanel from '@/components/mission/ActivityLedgerPanel.vue'
 
 interface Props {
   projectId: string
@@ -21,6 +23,7 @@ const props = defineProps<Props>()
 
 const loading = ref(false)
 const activeTab = ref('overview')
+const selectedTaskId = ref<string | null>(null)
 
 // Control mode
 const controlMode = ref('SUPERVISED')
@@ -57,10 +60,15 @@ async function saveMode(mode: string) {
   }
 }
 
+function handleTaskSelected(taskId: string) {
+  selectedTaskId.value = taskId
+}
+
 // Tab navigation
 const tabs = [
   { key: 'overview', label: '概览', icon: AnalyticsOutline },
   { key: 'task-detail', label: 'Task Detail', icon: PlayOutline },
+  { key: 'ledger', label: 'Execution Ledger', icon: DocumentTextOutline },
   { key: 'live', label: '实时执行', icon: PlayOutline },
   { key: 'performance', label: '性能档案', icon: TrendingUpOutline },
   { key: 'recommendations', label: '推荐', icon: SettingsOutline }
@@ -78,7 +86,7 @@ onMounted(() => {
       <div class="mc-header-left">
         <NIcon :size="24" color="#6366f1" :component="StorefrontOutline" />
         <span class="mc-title">Mission Control</span>
-        <NTag 
+        <NTag
           :color="{ color: modeColors[controlMode] + '22', borderColor: modeColors[controlMode], textColor: modeColors[controlMode] }"
           border-type="solid"
           size="small"
@@ -109,8 +117,20 @@ onMounted(() => {
     <!-- Panel Content -->
     <div class="mc-content">
       <Panel1Overview v-if="activeTab === 'overview'" :project-id="projectId" />
-      <TaskDetailPanel v-else-if="activeTab === 'task-detail'" task-id="task-1" />
-      <Panel2Live v-else-if="activeTab === 'live'" :project-id="projectId" />
+      <TaskDetailPanel
+        v-else-if="activeTab === 'task-detail'"
+        :task-id="selectedTaskId || 'task-1'"
+        :objective="selectedTaskId ? undefined : 'Implement authentication module with JWT'"
+      />
+      <ActivityLedgerPanel
+        v-else-if="activeTab === 'ledger'"
+        :task-id="selectedTaskId || ''"
+      />
+      <Panel2Live
+        v-else-if="activeTab === 'live'"
+        :project-id="projectId"
+        @task-selected="handleTaskSelected"
+      />
       <Panel3Performance v-else-if="activeTab === 'performance'" :project-id="projectId" />
       <Panel4Recommendations v-else-if="activeTab === 'recommendations'" :project-id="projectId" />
     </div>
@@ -185,3 +205,4 @@ onMounted(() => {
 
 .mb-4 { margin-bottom: 16px; }
 </style>
+

@@ -2,8 +2,10 @@ package com.teammind.controller;
 
 import com.teammind.common.ReadinessResult;
 import com.teammind.common.ReadinessState;
+import com.teammind.common.TaskActivity;
 import com.teammind.entity.*;
 import com.teammind.repository.*;
+import com.teammind.runtime.ActivityExtractor;
 import com.teammind.runtime.EventStoreService;
 import com.teammind.runtime.ReadinessManager;
 import com.teammind.websocket.WSEventPublisher;
@@ -43,6 +45,7 @@ public class TaskDetailController {
     private final EventStoreService eventStore;
     private final ReadinessManager readinessManager;
     private final WSEventPublisher wsPublisher;
+    private final ActivityExtractor activityExtractor;
 
     public TaskDetailController(TaskRepository taskRepo,
                                 TaskExecutionRepository executionRepo,
@@ -53,7 +56,8 @@ public class TaskDetailController {
                                 ApprovalRequestRepository approvalRepo,
                                 EventStoreService eventStore,
                                 ReadinessManager readinessManager,
-                                WSEventPublisher wsPublisher) {
+                                WSEventPublisher wsPublisher,
+                                ActivityExtractor activityExtractor) {
         this.taskRepo = taskRepo;
         this.executionRepo = executionRepo;
         this.stepRepo = stepRepo;
@@ -64,6 +68,7 @@ public class TaskDetailController {
         this.eventStore = eventStore;
         this.readinessManager = readinessManager;
         this.wsPublisher = wsPublisher;
+        this.activityExtractor = activityExtractor;
     }
 
     // ─── GET /api/tasks/{id} — Full state snapshot ────────────
@@ -167,6 +172,41 @@ public class TaskDetailController {
         log.info("Retry requested for task {}", taskId);
         wsPublisher.publishLog(taskId, "control", "system", "Retry requested");
         return Map.of("taskId", taskId, "action", "retry", "status", "requested");
+    }
+
+    // ─── GET /api/tasks/{id}/activity — Execution Ledger summary ───
+
+    @GetMapping("/{taskId}/activity")
+    public Map<String, Object> getActivity(@PathVariable String taskId) {
+        TaskActivity activity = activityExtractor.extract(taskId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("taskId", taskId);
+        result.put("extractedAt", activity.extractedAt().toString());
+        result.put("commandsExecuted", activity.commandsExecuted().stream()
+                .map(c -> Map.<String, Object>of(
+                        "command", c.command(),
+                        "durationMs", c.durationMs(),
+                        "exitCode", c.exitCode(),
+                        "startedAt", c.startedAt().toString()))
+                .toList());
+        result.put("filesChanged", activity.filesChanged());
+        result.put("dependenciesChanged", activity.dependenciesChanged().stream()
+                .map(d -> Map.<String, Object>of("action", d.action().name(), "name", d.name(), "version", d.version()))
+                .toList());
+        result.put("incidents", activity.incidents().stream()
+                .map(i -> Map.<String, Object>of(
+                        "type", i.type(),
+                        "description", i.description() != null ? i.description() : "",
+                        "resolved", i.resolved(),
+                        "resolvedBy", i.resolvedBy() != null ? i.resolvedBy() : ""))
+                .toList());
+        result.put("verifications", activity.verifications().stream()
+                .map(v -> Map.<String, Object>of("type", v.type(), "passed", v.passed(), "failed", v.failed()))
+                .toList());
+        result.put("agentDecisions", activity.agentDecisions().stream()
+                .map(d -> Map.<String, Object>of("type", d.type(), "content", d.content() != null ? d.content() : ""))
+                .toList());
+        return result;
     }
 
     // ─── Helpers ──────────────────────────────────────────────
