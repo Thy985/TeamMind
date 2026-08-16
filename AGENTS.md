@@ -56,6 +56,7 @@ user.email = 1850833838@qq.com
 - **Phase 3** ✅ CLI Platform + Recovery Hardening + Real Pipeline (commits `e161c5b2` → `25e4a373`)
 - **Phase 3-fix** ✅ E2E readiness-skip eliminated
 - **Phase 4-Sprint 1** ✅ Activity Extractor Engine — Execution Ledger 核心聚合引擎
+- **Phase 4-Fix** ✅ Frontend audit fixes — TaskDetailPanel 动态 taskId / Execution Ledger Tab / CLI Health Modal / HistoryPage real API
 
 ## 测试基线
 
