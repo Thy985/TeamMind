@@ -58,5 +58,7 @@ user.email = 1850833838@qq.com
 ## 测试基线
 
 - 后端单元测试：**302 pass, 0 failures**
-- 前端构建：`✓ built in 1.31s (4354 modules)`
-- E2E 测试：排除（需要真实 LLM provider 基础设施）
+- 后端 E2E 集成测试：**13 pass, 0 failures**（E2EIntegrationTest）
+- 全量测试：**315 pass, 0 failures**
+- 前端构建：`✓ built in 3.31s (4357 modules)`
+- E2E 真实集成：Codex CLI ✓、Claude Code CLI ✓、Codex++ provider ✓（端口 57321）
