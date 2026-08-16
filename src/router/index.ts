@@ -11,6 +11,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/projects',
+    name: 'projects',
+    component: () => import('@/pages/ProjectPage.vue'),
+    meta: {
+      title: 'Projects',
+      description: '管理 AI 协作项目'
+    }
+  },
+  {
     path: '/missions',
     children: [
       {

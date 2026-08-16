@@ -1,0 +1,19 @@
+# Claude Code CLI Adapter
+cli_id: claude-code
+command: "claude"
+args:
+  - "--print"
+  - "<prompt>"
+output_format: "ndjson"
+timeout_minutes: 60
+working_dir: "."
+health_check:
+  command: "claude --version"
+  expected_exit: 0
+dependencies:
+  - type: EXECUTABLE
+    name: claude-code-cli
+    check_command: "claude --version"
+  - type: AUTH
+    name: claude-auth
+    check_command: "test -f ~/.claude.json || test -f ~/.config/claude.json"

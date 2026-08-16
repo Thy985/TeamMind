@@ -1,0 +1,22 @@
+# Codex CLI Adapter
+cli_id: codex
+command: "codex"
+args:
+  - "<prompt>"
+output_format: "text"
+timeout_minutes: 60
+working_dir: "."
+health_check:
+  command: "codex --version"
+  expected_exit: 0
+dependencies:
+  - type: EXECUTABLE
+    name: codex-cli
+    check_command: "codex --version"
+  - type: SERVICE
+    name: local-provider
+    endpoint: "http://127.0.0.1:57321/v1/models"
+    health_check_timeout_ms: 5000
+  - type: AUTH
+    name: codex-auth
+    check_command: "test -f ~/.codex/config.toml"

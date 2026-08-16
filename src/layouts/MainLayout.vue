@@ -2,16 +2,17 @@
 import { computed, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NButton, NIcon, NSpace, NText, NBadge } from 'naive-ui'
-import { 
-  HomeOutline, 
-  TimeOutline, 
-  AppsOutline, 
-  FolderOutline, 
+import {
+  HomeOutline,
+  TimeOutline,
+  AppsOutline,
+  FolderOutline,
   SettingsOutline,
   MoonOutline,
   SunnyOutline,
   MenuOutline,
-  AnalyticsOutline
+  AnalyticsOutline,
+  StorefrontOutline
 } from '@vicons/ionicons5'
 import { useUIStore } from '@/stores'
 
@@ -20,6 +21,11 @@ const route = useRoute()
 const uiStore = useUIStore()
 
 const menuOptions = [
+  {
+    label: 'Projects',
+    key: 'projects',
+    icon: () => h(NIcon, null, { default: () => h(StorefrontOutline) })
+  },
   {
     label: 'Dashboard',
     key: 'dashboard',
