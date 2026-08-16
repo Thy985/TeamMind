@@ -5,6 +5,7 @@ import com.teammind.event.EventBus;
 import com.teammind.event.TeamMindEvent;
 import com.teammind.runtime.ReadinessManager;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -30,7 +31,7 @@ public class PluginManager {
     private final Map<String, Plugin> pluginsById = new ConcurrentHashMap<>();
     private final Map<Plugin.PluginType, List<Plugin>> pluginsByType = new ConcurrentHashMap<>();
 
-    public PluginManager(EventBus eventBus, ReadinessManager readinessManager) {
+    public PluginManager(EventBus eventBus, @Lazy ReadinessManager readinessManager) {
         this.eventBus = eventBus;
         this.readinessManager = readinessManager;
     }

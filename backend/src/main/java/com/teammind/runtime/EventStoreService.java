@@ -5,6 +5,7 @@ import com.teammind.entity.RuntimeEvent;
 import com.teammind.repository.RuntimeEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ public class EventStoreService {
     private final RuntimeEventRepository eventRepo;
     private final Path coldArchiveDir;
 
+    @Autowired
     public EventStoreService(RuntimeEventRepository eventRepo) {
         this.eventRepo = eventRepo;
         // Default: archive COLD events to ./data/events/cold/
