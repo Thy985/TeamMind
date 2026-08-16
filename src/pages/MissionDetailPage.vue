@@ -2,10 +2,11 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NGrid, NGi, NCard, NButton, NSpace, NText, NIcon, NTooltip, NTabs, NTabPane, NSpin, NTag, useMessage } from 'naive-ui'
-import { PlayOutline, PauseOutline, RefreshOutline, DownloadOutline, TrashOutline, CloseOutline } from '@vicons/ionicons5'
+import { PlayOutline, PauseOutline, RefreshOutline, DownloadOutline, TrashOutline, CloseOutline, DocumentTextOutline, AlertCircleOutline } from '@vicons/ionicons5'
 import CollaborationCanvas from '@/components/canvas/CollaborationCanvas.vue'
 import StructuredConsole from '@/components/common/StructuredConsole.vue'
 import AgentDetailModal from '@/components/common/AgentDetailModal.vue'
+import ActivityLedgerPanel from '@/components/mission/ActivityLedgerPanel.vue'
 import { useMissionStore } from '@/stores'
 import { wsManager } from '@/api'
 
@@ -20,6 +21,10 @@ const isNewMission = computed(() => route.name === 'mission-new')
 // State
 const selectedNodeId = ref<string | null>(null)
 const showDetailModal = ref(false)
+const activeTab = ref('canvas')
+const pipelineStepName = ref<string | null>(null)
+const pipelineStepAgent = ref<string | null>(null)
+const showApprovalBanner = ref(false)
 const isRunning = computed(() => missionStore.currentMission?.status === 'running' || missionStore.currentMission?.status === 'paused')
 const isLoading = ref(false)
 
@@ -208,6 +213,50 @@ onMounted(async () => {
         node.data.status = status as any
       }
     })
+
+    // Pipeline 步骤开始 — 显示当前步骤进度
+    wsManager.on('pipeline_step_started', (event: any) => {
+      const payload = event.payload || event.data || {}
+      pipelineStepName.value = payload.stepName || null
+      pipelineStepAgent.value = payload.agentId || null
+      missionStore.addLog({
+        id: `log-${Date.now()}`,
+        type: 'task',
+        timestamp: event.timestamp || new Date().toISOString(),
+        agentId: payload.agentId,
+        message: `Step started: ${payload.stepName || 'unknown'}`
+      })
+    })
+
+    // Pipeline 步骤完成 — 刷新 mission 数据
+    wsManager.on('pipeline_step_completed', (event: any) => {
+      const payload = event.payload || event.data || {}
+      pipelineStepName.value = null
+      pipelineStepAgent.value = null
+      missionStore.addLog({
+        id: `log-${Date.now()}`,
+        type: payload.success ? 'task' : 'warning',
+        timestamp: event.timestamp || new Date().toISOString(),
+        agentId: payload.agentId,
+        message: `Step ${payload.success ? 'completed' : 'failed'}: ${payload.stepName || 'unknown'}`
+      })
+      // Refresh mission data to reflect updated state
+      missionStore.fetchMission(missionId.value!)
+    })
+
+    // 审批请求 — 显示审批横幅
+    wsManager.on('approval_required', (event: any) => {
+      const payload = event.payload || event.data || {}
+      if (payload.taskId === missionId.value || event.missionId === missionId.value) {
+        showApprovalBanner.value = true
+        missionStore.addLog({
+          id: `log-${Date.now()}`,
+          type: 'resolution',
+          timestamp: event.timestamp || new Date().toISOString(),
+          message: `Approval required: ${payload.approval?.question || 'pending action'}`
+        })
+      }
+    })
   }
 })
 
@@ -277,6 +326,21 @@ onUnmounted(() => {
       </NSpace>
     </div>
 
+    <!-- Pipeline Step Banner -->
+    <div v-if="pipelineStepName" class="pipeline-banner">
+      <NSpin size="small" />
+      <NText depth="2" style="font-size:13px;">
+        {{ pipelineStepAgent }} executing: <strong>{{ pipelineStepName }}</strong>
+      </NText>
+    </div>
+
+    <!-- Approval Banner -->
+    <div v-if="showApprovalBanner" class="approval-banner">
+      <NIcon :component="AlertCircleOutline" color="#f59e0b" />
+      <NText style="font-size:13px;">Approval required — check Task Detail for pending actions</NText>
+      <NButton size="tiny" @click="showApprovalBanner = false">Dismiss</NButton>
+    </div>
+
     <!-- Main Content -->
     <NGrid :cols="24" :x-gap="16">
       <!-- Canvas -->
@@ -338,6 +402,18 @@ onUnmounted(() => {
       </NGi>
     </NGrid>
 
+    <!-- Execution Ledger Section -->
+    <NCard class="ledger-card" v-if="!isNewMission">
+      <template #header>
+        <NSpace align="center">
+          <NIcon :component="DocumentTextOutline" color="#6366f1" />
+          <NText strong>Execution Ledger</NText>
+          <NText depth="3" style="font-size:12px;">Activity summary from runtime events</NText>
+        </NSpace>
+      </template>
+      <ActivityLedgerPanel :task-id="missionId" />
+    </NCard>
+
     <!-- Agent Detail Modal -->
     <AgentDetailModal 
       v-model:show="showDetailModal"
@@ -394,5 +470,35 @@ onUnmounted(() => {
   padding: var(--spacing-2);
   background-color: var(--color-bg-tertiary);
   border-radius: var(--radius-md);
+}
+
+.pipeline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #6366f122;
+  border: 1px solid #6366f144;
+  border-radius: 8px;
+  margin-bottom: var(--spacing-3);
+}
+
+.approval-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #f59e0b22;
+  border: 1px solid #f59e0b44;
+  border-radius: 8px;
+  margin-bottom: var(--spacing-3);
+}
+
+.ledger-card {
+  margin-top: var(--spacing-4);
+}
+
+.ledger-card :deep(.n-card__content) {
+  padding: 16px;
 }
 </style>

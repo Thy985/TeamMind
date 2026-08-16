@@ -7,7 +7,7 @@ import {
   NList, NListItem, NSpin
 } from 'naive-ui'
 import { AddOutline, RefreshOutline, SettingsOutline, CheckmarkCircleOutline, AlertCircleOutline } from '@vicons/ionicons5'
-import axios from 'axios'
+import { api } from '@/api/axios'
 
 const router = useRouter()
 const message = useMessage()
@@ -34,8 +34,8 @@ const cliHealthLoading = ref(false)
 async function loadProjects() {
   try {
     loading.value = true
-    const res = await axios.get('/api/projects')
-    projects.value = res.data || []
+    const res = await api.get('/projects')
+    projects.value = (res as any).data || res || []
   } catch (e) {
     console.error('Failed to load projects:', e)
     message.error('加载项目失败')
@@ -50,7 +50,7 @@ async function createProject() {
     return
   }
   try {
-    await axios.post('/api/projects', {
+    await api.post('/projects', {
       name: newName.value,
       description: newDesc.value,
       rootPath: newRootPath.value || '.'
@@ -69,8 +69,8 @@ async function createProject() {
 async function checkCLIHealth(projectId: string) {
   try {
     cliHealthLoading.value = true
-    const res = await axios.get(`/api/projects/${projectId}/cli-health`)
-    const data = res.data
+    const res = await api.get(`/projects/${projectId}/cli-health`)
+    const data = (res as any).data || res
     cliHealthData.value = data
     showHealthModal.value = true
   } catch (e) {
