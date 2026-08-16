@@ -51,6 +51,15 @@ public class WSEvent {
     public static final String RESOLUTION_RESOLVED = "resolution_resolved";
     public static final String EVOLUTION_TRIGGERED = "evolution_triggered";
     public static final String EVOLUTION_COMPLETED = "evolution_completed";
+    public static final String STATE_UPDATE = "state_update";
+    public static final String TASK_PAUSE = "task_pause";
+    public static final String TASK_RESUME = "task_resume";
+    public static final String TASK_CANCEL = "task_cancel";
+    public static final String TASK_APPROVE = "task_approve";
+    public static final String TASK_RETRY = "task_retry";
+    public static final String APPROVAL_REQUIRED = "approval_required";
+    public static final String PIPELINE_STEP_STARTED = "pipeline_step_started";
+    public static final String PIPELINE_STEP_COMPLETED = "pipeline_step_completed";
 
     /**
      * 创建事件

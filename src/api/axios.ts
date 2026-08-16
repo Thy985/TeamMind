@@ -259,6 +259,25 @@ export const missionControlApi = {
     api.put(`/mission-control/project/${projectId}/control-mode`, { controlMode: mode })
 }
 
+// ==================== TaskDetail API ====================
+export const taskDetailApi = {
+  // Full state snapshot
+  getTask: (taskId: string) => api.get(`/tasks/${taskId}`),
+
+  // Event chain (for initial load)
+  getEvents: (taskId: string, after?: number) => {
+    const params = after && after > 0 ? `?after=${after}` : ''
+    return api.get(`/tasks/${taskId}/events${params}`)
+  },
+
+  // Control actions
+  pause: (taskId: string) => api.post(`/tasks/${taskId}/pause`),
+  resume: (taskId: string) => api.post(`/tasks/${taskId}/resume`),
+  cancel: (taskId: string) => api.post(`/tasks/${taskId}/cancel`),
+  approve: (taskId: string, body: Record<string, unknown>) => api.post(`/tasks/${taskId}/approve`, body),
+  retry: (taskId: string) => api.post(`/tasks/${taskId}/retry`)
+}
+
 // ==================== Auth API ====================
 export const authApi = {
   login: (data: { username: string; password: string }) => api.post('/auth/login', data, { retryable: false }),

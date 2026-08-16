@@ -253,3 +253,80 @@ export interface PaginatedResponse<T> {
   pageSize: number
   hasMore: boolean
 }
+
+// ==================== TaskDetail (Phase 2) ====================
+
+/** Task state snapshot (from GET /api/tasks/{id}) */
+export interface TaskDetailSnapshot {
+  taskId: string
+  projectId: string
+  objective: string
+  taskState: string
+  createdAt?: string
+  startedAt?: string
+  completedAt?: string
+  executionId?: string
+  executionState?: string
+  currentStep?: string
+  agentId?: string
+  attemptNumber?: number
+  durationMs?: number
+  summary?: string
+  errorReason?: string
+  steps?: TaskStep[]
+  artifacts?: TaskArtifact[]
+  evidence?: TaskEvidence[]
+  pendingApprovals?: TaskApproval[]
+  readiness?: Record<string, TaskReadiness>
+  snapshotVersion?: number
+}
+
+export interface TaskStep {
+  id: string
+  stepName: string
+  agentId: string
+  role: string
+  state: string
+  prompt?: string
+  outputSummary?: string
+  durationMs?: number
+  startedAt?: string
+  completedAt?: string
+}
+
+export interface TaskArtifact {
+  id: string
+  type: string
+  summary: string
+  data?: Record<string, unknown>
+  createdAt?: string
+}
+
+export interface TaskEvidence {
+  id: string
+  type: string
+  status: string
+  description?: string
+}
+
+export interface TaskApproval {
+  id: string
+  pluginId: string
+  question?: string
+  createdAt?: string
+}
+
+export interface TaskReadiness {
+  state: string
+  score: number
+  diagnosis: string
+  error?: string
+}
+
+/** WebSocket STATE_UPDATE payload */
+export interface StateUpdateEvent {
+  type: 'state_update'
+  taskId: string
+  snapshot: TaskDetailSnapshot
+  timestamp: string
+}

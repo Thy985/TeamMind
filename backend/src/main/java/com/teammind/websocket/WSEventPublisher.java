@@ -120,6 +120,49 @@ public class WSEventPublisher {
     }
 
     /**
+     * 发布任务状态快照更新（Phase 2 — TaskDetail 实时投影）
+     */
+    public void publishStateUpdate(String taskId, Map<String, Object> snapshot) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("taskId", taskId);
+        payload.put("snapshot", snapshot);
+        publish(WSEvent.of(WSEvent.STATE_UPDATE, taskId, payload));
+    }
+
+    /**
+     * 发布审批请求事件
+     */
+    public void publishApprovalRequired(String taskId, Map<String, Object> approval) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("taskId", taskId);
+        payload.put("approval", approval);
+        publish(WSEvent.of(WSEvent.APPROVAL_REQUIRED, taskId, payload));
+    }
+
+    /**
+     * 发布 Pipeline 步骤开始
+     */
+    public void publishStepStarted(String taskId, String stepName, String agentId) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("taskId", taskId);
+        payload.put("stepName", stepName);
+        payload.put("agentId", agentId);
+        publish(WSEvent.of(WSEvent.PIPELINE_STEP_STARTED, taskId, payload));
+    }
+
+    /**
+     * 发布 Pipeline 步骤完成
+     */
+    public void publishStepCompleted(String taskId, String stepName, String agentId, boolean success) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("taskId", taskId);
+        payload.put("stepName", stepName);
+        payload.put("agentId", agentId);
+        payload.put("success", success);
+        publish(WSEvent.of(WSEvent.PIPELINE_STEP_COMPLETED, taskId, payload));
+    }
+
+    /**
      * 发布决议投票更新事件
      */
     public void publishResolutionVote(String missionId, String resolutionId, String agentId, String optionId) {
