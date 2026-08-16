@@ -1,0 +1,48 @@
+# Review-Loop Pipeline
+# Codex implements → Claude reviews → Verifiers check
+#
+# Handoff flow: implement → review → verify → (fail) → implement (retry)
+
+name: "review-loop"
+description: "Multi-agent review loop: implement → review → verify"
+
+steps:
+  - name: implement
+    role: LEAD
+    agent: codex
+    prompt: |
+      任务：{{objective}}
+      约束：{{constraints}}
+      完成后输出文件变更列表和实现摘要。
+    output: CODE_DIFF
+    handoff: review
+    timeout: 300000
+
+  - name: review
+    role: REVIEWER
+    agent: claude-code
+    prompt: |
+      请审查以下实现：
+      任务目标：{{objective}}
+      变更文件：{{artifacts.implement.files}}
+      变更摘要：{{artifacts.implement.summary}}
+      关注点：安全、架构一致性、测试覆盖
+    output: REVIEW_FINDINGS
+    on_critical: request_approval
+    on_success: verify
+    handoff: verify
+    timeout: 120000
+
+  - name: verify
+    role: VERIFIER
+    agents:
+      - git-verifier
+      - test-runner-verifier
+    output: EVIDENCE
+    on_all_pass: done
+    on_any_fail: implement
+    timeout: 60000
+
+retry:
+  max_attempts: 3
+  backoff_ms: 5000

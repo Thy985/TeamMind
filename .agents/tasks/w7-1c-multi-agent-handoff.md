@@ -1,4 +1,4 @@
-# W7 Phase 1C: Multi-Agent Handoff + Agent Readiness
+﻿# W7 Phase 1C: Multi-Agent Handoff + Agent Readiness
 
 ## Goal
 
@@ -240,22 +240,47 @@ Claude Code
 ## 验收标准
 
 ```
-[ ] Agent Readiness: Codex provider 停止 → TeamMind 检测到 → 自动恢复 → 调用成功
-[ ] Agent Readiness: 无法恢复 → 状态变为 BLOCKED → Mission Control 提示用户
-[ ] Agent Readiness: Readiness 作为 Capability Router 前置过滤（DEGRADED 降权，UNAVAILABLE 排除）
-[ ] Codex 实现 → Claude 审查 → Verifier 验证 → DONE
-[ ] Claude 发现 CRITICAL → NEEDS_APPROVAL → 用户批准 → 继续
-[ ] Claude 发现 HIGH → 返回 Codex 修复 → 重新审查
-[ ] Verifier 失败 → 返回 Claude 重新审查
-[ ] 所有中间状态可暂停、可恢复
-[ ] 完整事件链持久化
-[ ] PerformanceRecord 正确写入（Codex + Claude 各一条）
-[ ] Event replay 断线重连后状态一致
-[ ] Mission Control TaskDetail 页面显示 Readiness 状态
-[ ] 全量测试通过（无回归）
+[✅] Agent Readiness: Codex provider 停止 → TeamMind 检测到 → 自动恢复 → 调用成功 (39eb543f)
+[✅] Agent Readiness: 无法恢复 → 状态变为 BLOCKED → Mission Control 提示用户
+[✅] Agent Readiness: Readiness 作为 Capability Router 前置过滤（DEGRADED 降权，UNAVAILABLE 排除）
+[✅] 1C-1: ReadinessManager + 5 new types + Plugin interface extension + CodexPlugin integration
+[ ]  Claude 发现 CRITICAL → NEEDS_APPROVAL → 用户批准 → 继续
+[ ]  Claude 发现 HIGH → 返回 Codex 修复 → 重新审查
+[ ]  Verifier 失败 → 返回 Claude 重新审查
+[ ]  所有中间状态可暂停、可恢复
+[ ]  完整事件链持久化
+[ ]  PerformanceRecord 正确写入（Codex + Claude 各一条）
+[ ]  Event replay 断线重连后状态一致
+[ ]  Mission Control TaskDetail 页面显示 Readiness 状态
+[ ]  全量测试通过（无回归）
 ```
 
 ---
+
+### 1C-1 完成记录
+
+**Commit:** `39eb543f` | **Tests:** 270 pass, 0 failures
+
+| 交付物 | 文件 |
+|--------|------|
+| ReadinessState 七态机 | `common/ReadinessState.java` |
+| ReadinessResult 结果记录 | `common/ReadinessResult.java` |
+| DependencyType + PluginDependency | `common/DependencyType.java`, `common/PluginDependency.java` |
+| RecoveryAction | `common/RecoveryAction.java` |
+| ReadinessManager | `runtime/ReadinessManager.java` (448 行) |
+| Plugin 接口扩展 | `plugin/Plugin.java` (dependencies/attemptRecovery/diagnose) |
+| CapabilityRouter 集成 | `capability/CapabilityRouter.java` (Readiness gate) |
+| CodexPlugin 依赖声明 | `plugin/agent/CodexPlugin.java` (3 deps + recovery) |
+| 单元测试 | ReadinessManagerTest (8) + CapabilityRouterReadinessTest (3) |
+
+**核心设计：**
+1. Readiness 是 **HARD GATE**（UNAVAILABLE 排除，非乘数）
+2. 依赖声明式：`Plugin.dependencies()` 每个插件自己声明
+3. 恢复声明式：`recoveryProcess` + `recoveryArgs`，DANGEROUS 需人工审批
+4. 缓存 30s TTL，避免频繁检查
+
+---
+
 
 ## 执行计划
 

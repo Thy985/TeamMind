@@ -2,32 +2,35 @@ package com.teammind.runtime;
 
 import com.teammind.common.*;
 import com.teammind.entity.*;
+import com.teammind.plugin.Plugin;
+import com.teammind.plugin.PluginManager;
 import com.teammind.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
 /**
- * PipelineOrchestrator — Phase 1B: Single-Agent Runtime
+ * PipelineOrchestrator — Phase 1C-2: Multi-Agent Pipeline
  *
  * 职责：
- *   1. 从 YAML 加载 Pipeline 定义
- *   2. 为每个 Task 创建 TaskExecution + ExecutionStep
- *   3. 调用 Agent Plugin 执行步骤
- *   4. 跟踪 AgentInvocation（pid, duration, exitCode）
- *   5. 完成后创建 Artifact + Evidence
- *   6. 失败时记录 errorReason
+ *   1. 从 YAML 加载 PipelineDefinition
+ *   2. 解析步骤定义（agent, prompt, handoff, 条件跳转）
+ *   3. 执行多步骤流水线，自动 handoff
+ *   4. 跟踪每个步骤的 PipelineStepResult
+ *   5. 根据条件决定下一步（handoff / retry / approval）
+ *   6. 构建最终的 PipelineExecutionResult
  *
- * 与 TaskExecutionStateMachine 的关系：
- *   PipelineOrchestrator 调用 machine.transition() 来改变状态，
- *   然后由调用方（如 MissionControlController）持久化到 DB。
+ * 与 Phase 1B PipelineOrchestrator 的关系：
+ *   保留了 submitAndRun / completeStep / retryExecution 方法以保持兼容，
+ *   新增 executePipeline() 支持多步骤 YAML 驱动执行。
  */
 @Slf4j
 @Component
@@ -42,17 +45,12 @@ public class PipelineOrchestrator {
     private final EvidenceRepository evidenceRepo;
     private final TaskExecutionStateMachine stateMachine;
     private final EvidenceLifecycleService evidenceService;
+    private final PluginManager pluginManager;
+    private final ReadinessManager readinessManager;
 
-    /**
-     * 提交一个新 Task 并开始执行。
-     *
-     * @param taskId    已创建的 Task ID
-     * @param objective 任务目标
-     * @param agentId   使用的 Agent（"codex" / "claude-code"）
-     * @return 创建的 TaskExecution
-     */
+    // ─── Phase 1B compatibility ──────────────────────────────
+
     public TaskExecution submitAndRun(String taskId, String objective, String agentId) {
-        // 1. 创建 TaskExecution (NEW)
         TaskExecution execution = TaskExecution.builder()
                 .id(UUID.randomUUID().toString())
                 .taskId(taskId)
@@ -66,16 +64,13 @@ public class PipelineOrchestrator {
                 .build();
         execution = executionRepo.save(execution);
 
-        // 2. NEW → PENDING (submit)
         stateMachine.transition(execution, "submit");
         execution = executionRepo.save(execution);
         log.info("TaskExecution {} submitted (attempt 1)", execution.getId());
 
-        // 3. PENDING → RUNNING (start)
         stateMachine.transition(execution, "start");
         execution = executionRepo.save(execution);
 
-        // 4. 创建 ExecutionStep (implement)
         ExecutionStep step = ExecutionStep.builder()
                 .id(UUID.randomUUID().toString())
                 .executionId(execution.getId())
@@ -91,7 +86,6 @@ public class PipelineOrchestrator {
         execution.setAgentId(agentId);
         execution = executionRepo.save(execution);
 
-        // 5. PENDING → STARTED → RUNNING
         step.setState(ExecutionStepState.STARTED);
         step = stepRepo.save(step);
         step.setState(ExecutionStepState.RUNNING);
@@ -101,26 +95,15 @@ public class PipelineOrchestrator {
         return execution;
     }
 
-    /**
-     * 完成一个步骤（由 Agent Plugin 回调调用）。
-     *
-     * @param executionId 执行 ID
-     * @param invocationId 调用的 AgentInvocation ID
-     * @param exitCode 退出码
-     * @param stdoutSummary stdout 摘要
-     * @param stderrSummary stderr 摘要
-     * @param durationMs 耗时
-     */
     public void completeStep(String executionId, String invocationId,
-                             int exitCode, String stdoutSummary,
-                             String stderrSummary, long durationMs) {
+                              int exitCode, String stdoutSummary,
+                              String stderrSummary, long durationMs) {
         TaskExecution execution = executionRepo.findById(executionId).orElse(null);
         if (execution == null) {
             log.warn("Execution {} not found for step completion", executionId);
             return;
         }
 
-        // 查找对应的 step
         List<ExecutionStep> steps = stepRepo.findByExecutionIdOrderByStartedAtAsc(executionId);
         ExecutionStep currentStep = steps.stream()
                 .filter(s -> s.getState() == ExecutionStepState.RUNNING)
@@ -132,7 +115,6 @@ public class PipelineOrchestrator {
             return;
         }
 
-        // 完成 Invocation
         AgentInvocation invocation = invocationRepo.findById(invocationId).orElse(null);
         if (invocation != null) {
             invocation.setExitCode(exitCode);
@@ -144,7 +126,6 @@ public class PipelineOrchestrator {
         }
 
         if (exitCode == 0) {
-            // 成功：创建 Artifact + Evidence
             String artifactId = UUID.randomUUID().toString();
             Artifact artifact = Artifact.builder()
                     .id(artifactId)
@@ -156,26 +137,22 @@ public class PipelineOrchestrator {
                     .build();
             artifactRepo.save(artifact);
 
-            // 声明 Evidence
             Evidence evidence = evidenceService.claim(invocationId, EvidenceType.GIT_DIFF, "Agent completed implementation");
             evidence.setArtifactHash(artifactId);
             evidenceRepo.save(evidence);
 
-            // 标记 step COMPLETED
             currentStep.setState(ExecutionStepState.COMPLETED);
             currentStep.setOutputSummary(stdoutSummary);
             currentStep.setDurationMs(durationMs);
             currentStep.setCompletedAt(LocalDateTime.now());
             stepRepo.save(currentStep);
 
-            // Execution: RUNNING → DONE
             stateMachine.transition(execution, "complete");
             execution.setSummary("Implementation completed successfully");
             execution.setCompletedAt(LocalDateTime.now());
             execution.setDurationMs(durationMs);
             executionRepo.save(execution);
 
-            // 更新 Task 宏观状态
             var task = taskRepo.findById(execution.getTaskId()).orElse(null);
             if (task != null) {
                 task.setState(TaskState.DONE);
@@ -185,7 +162,6 @@ public class PipelineOrchestrator {
 
             log.info("Execution {} completed successfully", executionId);
         } else {
-            // 失败
             currentStep.setState(ExecutionStepState.FAILED);
             currentStep.setDurationMs(durationMs);
             currentStep.setCompletedAt(LocalDateTime.now());
@@ -200,22 +176,16 @@ public class PipelineOrchestrator {
         }
     }
 
-    /**
-     * 重试一个失败的 Execution。
-     */
     public TaskExecution retryExecution(String executionId) {
         TaskExecution original = executionRepo.findById(executionId).orElse(null);
         if (original == null) return null;
 
-        // FAILED → RETRYING
         stateMachine.transition(original, "retry");
         original = executionRepo.save(original);
 
-        // RETRYING → PENDING (startRetry)
         stateMachine.transition(original, "startRetry");
         original = executionRepo.save(original);
 
-        // 创建新的 attempt
         TaskExecution newExec = TaskExecution.builder()
                 .id(UUID.randomUUID().toString())
                 .taskId(original.getTaskId())
@@ -229,11 +199,9 @@ public class PipelineOrchestrator {
                 .build();
         newExec = executionRepo.save(newExec);
 
-        // PENDING → RUNNING
         stateMachine.transition(newExec, "start");
         newExec = executionRepo.save(newExec);
 
-        // 创建新 step
         ExecutionStep step = ExecutionStep.builder()
                 .id(UUID.randomUUID().toString())
                 .executionId(newExec.getId())
@@ -254,9 +222,330 @@ public class PipelineOrchestrator {
         return newExec;
     }
 
+    // ─── Phase 1C-2: Multi-Agent Pipeline ────────────────────
+
+    /**
+     * 从 classpath 加载 Pipeline 定义
+     */
+    public PipelineDefinition loadPipeline(String resourceName) {
+        try {
+            ClassPathResource resource = new ClassPathResource("pipelines/" + resourceName);
+            try (InputStream is = resource.getInputStream()) {
+                Yaml yaml = new Yaml();
+                Map<String, Object> map = yaml.load(is);
+                return parsePipelineDefinition(map);
+            }
+        } catch (Exception e) {
+            log.error("Failed to load pipeline '{}': {}", resourceName, e.getMessage());
+            throw new RuntimeException("Failed to load pipeline: " + resourceName, e);
+        }
+    }
+
+    /**
+     * 执行多步骤 Pipeline
+     *
+     * @param taskId         任务 ID
+     * @param objective      任务目标
+     * @param constraints    约束列表
+     * @param pipelineName   Pipeline YAML 文件名（不含 .yaml 后缀）
+     * @return 执行结果
+     */
+    public PipelineExecutionResult executePipeline(String taskId, String objective,
+                                                     List<String> constraints,
+                                                     String pipelineName) {
+        PipelineDefinition def = loadPipeline(pipelineName + ".yaml");
+        log.info("Executing pipeline '{}' for task {}", pipelineName, taskId);
+
+        PipelineContext context = PipelineContext.builder()
+                .pipelineName(def.getName())
+                .taskId(taskId)
+                .projectId(findProjectId(taskId))
+                .objective(objective)
+                .stepIndex(0)
+                .startedAt(LocalDateTime.now())
+                .build();
+
+        List<PipelineStepResult> allResults = new ArrayList<>();
+        String currentStepName = def.getSteps().get(0).getName();
+        int totalAttempts = 0;
+        int maxAttempts = def.getRetry().getMaxAttempts();
+
+        while (currentStepName != null && totalAttempts < maxAttempts * def.getSteps().size()) {
+            totalAttempts++;
+            log.info("Pipeline step: {} (attempt {}/{})", currentStepName, totalAttempts, maxAttempts);
+
+            PipelineStepDefinition stepDef = def.getStep(currentStepName);
+            if (stepDef == null) {
+                log.error("Step '{}' not found in pipeline definition", currentStepName);
+                break;
+            }
+
+            context.setCurrentStep(currentStepName);
+
+            // Resolve prompt
+            String prompt = stepDef.resolvePrompt(objective, constraints, context);
+
+            // Execute step
+            PipelineStepResult stepResult = executeStep(stepDef, prompt, context);
+            allResults.add(stepResult);
+            context.recordStepResult(currentStepName, stepResult);
+
+            // Check for approval needed
+            if (stepResult.isCritical()) {
+                log.warn("Critical finding in step '{}', need approval", currentStepName);
+                context.setCompletedAt(LocalDateTime.now());
+                return PipelineExecutionResult.builder()
+                        .pipelineName(def.getName())
+                        .taskId(taskId)
+                        .overallStatus("NEEDS_APPROVAL")
+                        .context(context)
+                        .stepResults(allResults)
+                        .totalDurationMs(calculateTotalDuration(allResults))
+                        .startedAt(context.getStartedAt())
+                        .completedAt(LocalDateTime.now())
+                        .build();
+            }
+
+            // Determine next step
+            currentStepName = stepDef.determineNext(stepResult);
+            if (currentStepName != null) {
+                context.recordHandoff(context.getCurrentStep(), currentStepName,
+                        stepResult.isSuccess() ? "success" : "condition");
+            }
+
+            // Backoff between steps
+            if (currentStepName != null) {
+                try {
+                    Thread.sleep(def.getRetry().getBackoffMs() / 4);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+
+        // Build final result
+        Artifact finalArtifact = context.getArtifacts().values().stream()
+                .filter(Objects::nonNull)
+                .reduce((a, b) -> b)  // last artifact wins
+                .orElse(null);
+
+        String overallStatus = allResults.stream().anyMatch(PipelineStepResult::isFailed)
+                ? "FAILED" : "SUCCESS";
+
+        context.setCompletedAt(LocalDateTime.now());
+
+        PipelineExecutionResult result = PipelineExecutionResult.builder()
+                .pipelineName(def.getName())
+                .taskId(taskId)
+                .overallStatus(overallStatus)
+                .context(context)
+                .stepResults(allResults)
+                .finalArtifact(finalArtifact)
+                .totalDurationMs(calculateTotalDuration(allResults))
+                .startedAt(context.getStartedAt())
+                .completedAt(context.getCompletedAt())
+                .build();
+
+        log.info("Pipeline '{}' completed: status={}", def.getName(), overallStatus);
+        return result;
+    }
+
+    /**
+     * 执行单个步骤（模拟 agent invocation）
+     */
+    private PipelineStepResult executeStep(PipelineStepDefinition stepDef,
+                                             String prompt, PipelineContext context) {
+        long startMs = System.currentTimeMillis();
+
+        try {
+            String agentId = stepDef.getAgent();
+            if (agentId == null && stepDef.isMultiAgent()) {
+                // 多 Agent 步骤：取第一个可用的
+                agentId = stepDef.getAgents().get(0);
+            }
+
+            if (agentId == null) {
+                log.warn("No agent specified for step '{}'", stepDef.getName());
+                return PipelineStepResult.builder()
+                        .stepName(stepDef.getName())
+                        .state("FAILED")
+                        .errorReason("No agent specified")
+                        .durationMs(System.currentTimeMillis() - startMs)
+                        .build();
+            }
+
+            // Check readiness
+            if (readinessManager != null) {
+                ReadinessResult readiness = readinessManager.check(agentId);
+                if (!readiness.isRunnable()) {
+                    log.warn("Agent '{}' not ready: {}", agentId, readiness.state());
+                    return PipelineStepResult.builder()
+                            .stepName(stepDef.getName())
+                            .agentId(agentId)
+                            .state("FAILED")
+                            .errorReason("Agent not ready: " + readiness.state())
+                            .durationMs(System.currentTimeMillis() - startMs)
+                            .build();
+                }
+            }
+
+            // Simulate execution (in production, this would call the actual plugin)
+            String output = simulateAgentExecution(agentId, prompt, stepDef);
+            long duration = System.currentTimeMillis() - startMs;
+
+            // Create artifact
+            String artifactId = UUID.randomUUID().toString();
+            Artifact artifact = Artifact.builder()
+                    .id(artifactId)
+                    .type(stepDef.getOutput() != null ? stepDef.getOutput() : "UNKNOWN")
+                    .summary(output)
+                    .data(Map.of("step", stepDef.getName(), "agent", agentId))
+                    .createdAt(LocalDateTime.now())
+                    .build();
+
+            log.info("Step '{}' completed: agent={}, duration={}ms, output_len={}",
+                    stepDef.getName(), agentId, duration, output.length());
+
+            return PipelineStepResult.builder()
+                    .stepName(stepDef.getName())
+                    .agentId(agentId)
+                    .state("SUCCESS")
+                    .artifact(artifact)
+                    .outputSummary(output)
+                    .durationMs(duration)
+                    .exitCode(0)
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Step '{}' failed: {}", stepDef.getName(), e.getMessage());
+            return PipelineStepResult.builder()
+                    .stepName(stepDef.getName())
+                    .state("FAILED")
+                    .errorReason(e.getMessage())
+                    .durationMs(System.currentTimeMillis() - startMs)
+                    .build();
+        }
+    }
+
+    /**
+     * 模拟 Agent 执行（生产环境替换为真实 plugin.invoke()）
+     */
+    private String simulateAgentExecution(String agentId, String prompt,
+                                            PipelineStepDefinition stepDef) {
+        // In production: call plugin.invoke(prompt, projectPath)
+        // For now, simulate based on step type
+        if ("review".equals(stepDef.getName())) {
+            return "[REVIEW] No critical findings. Implementation looks good.\n" +
+                   "  - Code style: OK\n" +
+                   "  - Security: No issues\n" +
+                   "  - Tests: Recommend adding edge case coverage";
+        } else if ("verify".equals(stepDef.getName())) {
+            return "[VERIFY] All checks passed.\n" +
+                   "  - Git diff: clean\n" +
+                   "  - Tests: green\n" +
+                   "  - Lint: no warnings";
+        } else {
+            return "[IMPLEMENT] Completed task.\n" +
+                   "  Files changed: 3\n" +
+                   "  Lines added: 142\n" +
+                   "  Lines removed: 23";
+        }
+    }
+
+    private long calculateTotalDuration(List<PipelineStepResult> results) {
+        return results.stream().mapToLong(PipelineStepResult::getDurationMs).sum();
+    }
+
     private String findProjectId(String taskId) {
         return taskRepo.findById(taskId)
                 .map(Task::getProjectId)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+    }
+
+    /**
+     * 将 YAML Map 解析为 PipelineDefinition
+     */
+    private PipelineDefinition parsePipelineDefinition(Map<String, Object> map) {
+        PipelineDefinition.PipelineDefinitionBuilder builder = PipelineDefinition.builder();
+        builder.name(safeStr(map.get("name")));
+        builder.description(safeStr(map.get("description")));
+
+        // Parse steps
+        List<Object> stepsRaw = safeList(map.get("steps"));
+        List<PipelineStepDefinition> steps = new ArrayList<>();
+        for (Object stepObj : stepsRaw) {
+            if (stepObj instanceof Map) {
+                steps.add(parseStepDefinition((Map<String, Object>) stepObj));
+            }
+        }
+        builder.steps(steps);
+
+        // Parse retry policy
+        Map<String, Object> retryMap = safeMap(map.get("retry"));
+        if (!retryMap.isEmpty()) {
+            builder.retry(PipelineRetryPolicy.builder()
+                    .maxAttempts(safeInt(retryMap.get("max_attempts"), 3))
+                    .backoffMs(safeLong(retryMap.get("backoff_ms"), 5000L))
+                    .build());
+        } else {
+            builder.retry(PipelineRetryPolicy.DEFAULT);
+        }
+
+        return builder.build();
+    }
+
+    private PipelineStepDefinition parseStepDefinition(Map<String, Object> map) {
+        PipelineStepDefinition.PipelineStepDefinitionBuilder builder = PipelineStepDefinition.builder();
+        builder.name(safeStr(map.get("name")));
+        builder.role(safeStr(map.get("role")));
+        builder.agent(safeStr(map.get("agent")));
+        builder.output(safeStr(map.get("output")));
+        builder.handoff(safeStr(map.get("handoff")));
+        builder.onCritical(safeStr(map.get("on_critical")));
+        builder.onSuccess(safeStr(map.get("on_success")));
+        builder.onAllPass(safeStr(map.get("on_all_pass")));
+        builder.onAnyFail(safeStr(map.get("on_any_fail")));
+        builder.timeout(safeLong(map.get("timeout"), 300000L));
+        builder.maxRetries(safeInt(map.get("max_retries"), 0));
+        builder.prompt(safeStr(map.get("prompt")));
+
+        // Parse agents list
+        List<Object> agentsRaw = safeList(map.get("agents"));
+        if (!agentsRaw.isEmpty()) {
+            List<String> agents = new ArrayList<>();
+            for (Object a : agentsRaw) {
+                if (a instanceof String) agents.add((String) a);
+            }
+            builder.agents(agents);
+        }
+
+        return builder.build();
+    }
+
+    // ─── Type-safe helpers ────────────────────────────────────
+
+    private String safeStr(Object obj) {
+        return obj instanceof String ? (String) obj : null;
+    }
+
+    private int safeInt(Object obj, int defaultVal) {
+        if (obj instanceof Number) return ((Number) obj).intValue();
+        return defaultVal;
+    }
+
+    private long safeLong(Object obj, long defaultVal) {
+        if (obj instanceof Number) return ((Number) obj).longValue();
+        return defaultVal;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> safeList(Object obj) {
+        return obj instanceof List ? (List<Object>) obj : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> safeMap(Object obj) {
+        return obj instanceof Map ? (Map<String, Object>) obj : Map.of();
     }
 }
