@@ -82,6 +82,7 @@ public class RuntimeEvent {
                  PLUGIN_UNHEALTHY, PLUGIN_DOWN -> EventTier.HOT;
             case PROFILE_UPDATED, DRIFT_DETECTED, RECOMMENDATION_GENERATED, LESSON_LEARNED -> EventTier.WARM;
             case TASK_STATE_CHANGED -> EventTier.HOT;
+            case DEPENDENCY_CHANGED -> EventTier.WARM;
         };
     }
 

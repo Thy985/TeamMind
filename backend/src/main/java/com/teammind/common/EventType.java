@@ -91,5 +91,8 @@ public enum EventType {
     LESSON_LEARNED,
 
     // ─── 状态转移 ─────────────────────────────
-    TASK_STATE_CHANGED
+    TASK_STATE_CHANGED,
+
+    // ─── 环境变更 ─────────────────────────────
+    DEPENDENCY_CHANGED
 }
