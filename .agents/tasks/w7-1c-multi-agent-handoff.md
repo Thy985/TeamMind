@@ -1,4 +1,4 @@
-﻿# W7 Phase 1C: Multi-Agent Handoff + Agent Readiness
+# W7 Phase 1C: Multi-Agent Handoff + Agent Readiness
 
 ## Goal
 
@@ -189,6 +189,29 @@ record HandoffContext(
     String previousOutputSummary;
 )
 ```
+
+### 1C-2 完成记录
+
+**Commit:** `e5f6e90d` | **Tests:** 287 pass, 0 failures
+
+| 交付物 | 文件 |
+|--------|------|
+| PipelineDefinition | `runtime/PipelineDefinition.java` |
+| PipelineStepDefinition | `runtime/PipelineStepDefinition.java` |
+| PipelineContext | `runtime/PipelineContext.java` |
+| PipelineStepResult | `runtime/PipelineStepResult.java` |
+| PipelineExecutionResult | `runtime/PipelineExecutionResult.java` |
+| PipelineRetryPolicy | `runtime/PipelineRetryPolicy.java` |
+| PipelineOrchestrator 扩展 | `runtime/PipelineOrchestrator.java` (executePipeline + YAML parsing) |
+| review-loop.yaml | `resources/pipelines/review-loop.yaml` |
+| 单元测试 | PipelineStepDefinitionTest (7) + PipelineContextTest (5) + PipelineDefinitionTest (5) |
+
+**核心设计：**
+1. YAML-driven: 所有步骤通过 `pipelines/*.yaml` 定义，无需代码修改即可新增 pipeline
+2. 模板变量: `{{objective}}`, `{{constraints}}`, `{{artifacts.xxx.summary}}` 自动替换
+3. 条件路由: `on_critical` / `on_success` / `on_all_pass` / `on_any_fail` 控制流程分支
+4. Readiness 前置: 每个步骤执行前检查 agent readiness
+5. Backoff: 步骤间自动退避，避免资源争抢
 
 ---
 
