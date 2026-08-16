@@ -5,6 +5,7 @@ import com.teammind.entity.*;
 import com.teammind.plugin.Plugin;
 import com.teammind.plugin.PluginManager;
 import com.teammind.repository.*;
+import com.teammind.websocket.WSEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
@@ -47,6 +48,7 @@ public class PipelineOrchestrator {
     private final EvidenceLifecycleService evidenceService;
     private final PluginManager pluginManager;
     private final ReadinessManager readinessManager;
+    private final WSEventPublisher wsPublisher;
 
     // ─── Phase 1B compatibility ──────────────────────────────
 
@@ -265,6 +267,12 @@ public class PipelineOrchestrator {
                 .startedAt(LocalDateTime.now())
                 .build();
 
+        // Publish pipeline start
+        if (wsPublisher != null) {
+            wsPublisher.publishLog(taskId, "pipeline", "orchestrator",
+                    "Pipeline '" + def.getName() + "' started");
+        }
+
         List<PipelineStepResult> allResults = new ArrayList<>();
         String currentStepName = def.getSteps().get(0).getName();
         int totalAttempts = 0;
@@ -348,6 +356,13 @@ public class PipelineOrchestrator {
                 .build();
 
         log.info("Pipeline '{}' completed: status={}", def.getName(), overallStatus);
+
+        // Publish final state update
+        if (wsPublisher != null) {
+            wsPublisher.publishLog(taskId, "pipeline", "orchestrator",
+                    "Pipeline '" + def.getName() + "' finished: " + overallStatus);
+        }
+
         return result;
     }
 
@@ -380,6 +395,10 @@ public class PipelineOrchestrator {
                 ReadinessResult readiness = readinessManager.check(agentId);
                 if (!readiness.isRunnable()) {
                     log.warn("Agent '{}' not ready: {}", agentId, readiness.state());
+                    if (wsPublisher != null) {
+                        wsPublisher.publishLog(context.getTaskId(), "error", agentId,
+                                "Agent not ready: " + readiness.state());
+                    }
                     return PipelineStepResult.builder()
                             .stepName(stepDef.getName())
                             .agentId(agentId)
@@ -388,6 +407,11 @@ public class PipelineOrchestrator {
                             .durationMs(System.currentTimeMillis() - startMs)
                             .build();
                 }
+            }
+
+            // Publish step started event
+            if (wsPublisher != null) {
+                wsPublisher.publishStepStarted(context.getTaskId(), stepDef.getName(), agentId);
             }
 
             // Simulate execution (in production, this would call the actual plugin)
@@ -406,6 +430,12 @@ public class PipelineOrchestrator {
 
             log.info("Step '{}' completed: agent={}, duration={}ms, output_len={}",
                     stepDef.getName(), agentId, duration, output.length());
+
+            // Publish step completed event
+            if (wsPublisher != null) {
+                wsPublisher.publishStepCompleted(context.getTaskId(),
+                        stepDef.getName(), agentId, true);
+            }
 
             return PipelineStepResult.builder()
                     .stepName(stepDef.getName())
