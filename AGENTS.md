@@ -60,6 +60,7 @@ user.email = 1850833838@qq.com
 - **Phase 4-Sprint 2** ✅ Evidence extension — PACKAGE_INSTALLED / COMMAND_EXITED / ENV_VAR_MODIFIED / PROCESS_STARTED / FILE_DELETED
 - **Phase 4-P0** ✅ Eliminate hardcoded fake data, dead TODO buttons, WebSocket hack
 - **Phase 4-P1** ✅ MissionDetail Ledger tab / pipeline WS events / unified API layer
+- **Phase 4-Sprint 3** ✅ Ledger UI — command folding + Knowledge Candidates + dual-column layout
 
 ## 测试基线
 
