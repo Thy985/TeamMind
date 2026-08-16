@@ -17,7 +17,7 @@ class PluginManagerTest {
 
     @BeforeEach
     void setUp() {
-        manager = new PluginManager(new EventBus(new com.fasterxml.jackson.databind.ObjectMapper()));
+        manager = new PluginManager(new EventBus(new com.fasterxml.jackson.databind.ObjectMapper()), null);
     }
 
     @Test

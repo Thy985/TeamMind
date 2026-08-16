@@ -2,9 +2,11 @@ package com.teammind.capability;
 
 import com.teammind.common.AgentRole;
 import com.teammind.common.ControlMode;
+import com.teammind.common.ReadinessResult;
 import com.teammind.plugin.Plugin;
 import com.teammind.runtime.PolicyEngine;
 import com.teammind.runtime.ProjectPolicy;
+import com.teammind.runtime.ReadinessManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -15,10 +17,11 @@ import java.util.stream.Collectors;
  * 能力路由引擎 — 8 因素加权评分 + Team Policy 硬约束
  *
  * 路由流程：
- * 1. 根据 requiredCapability 找到候选 Plugin
- * 2. Policy Engine 过滤掉违反规则的 Plugin
- * 3. 对剩余候选计算 8 因素评分
- * 4. 返回最高分 Plugin + 完整得分详情
+ * 1. Readiness 前置过滤（UNAVAILABLE → 排除）
+ * 2. 根据 requiredCapability 找到候选 Plugin
+ * 3. Policy Engine 过滤掉违反规则的 Plugin
+ * 4. 对剩余候选计算 8 因素评分
+ * 5. 返回最高分 Plugin + 完整得分详情
  */
 @Slf4j
 @Component
@@ -35,27 +38,51 @@ public class CapabilityRouter {
     private static final double ROUTING_LESSON_BONUS_MAX = 0.15;
 
     private final PolicyEngine policyEngine;
+    private final ReadinessManager readinessManager;
 
-    public CapabilityRouter(PolicyEngine policyEngine) {
+    public CapabilityRouter(PolicyEngine policyEngine, ReadinessManager readinessManager) {
         this.policyEngine = policyEngine;
+        this.readinessManager = readinessManager;
     }
 
     /**
      * 路由决策入口
-     *
-     * @param capability          所需能力
-     * @param availablePlugins    可用 Plugin 列表
-     * @param projectId           项目 ID
-     * @param taskDescription     任务描述（用于推断任务类型）
-     * @param projectPolicy       项目治理规则
-     * @param controlMode         控制模式
-     * @return 路由决策
      */
     public RoutingDecision route(String capability, List<Plugin> availablePlugins,
-                                  String projectId, String taskDescription,
-                                  ProjectPolicy projectPolicy, ControlMode controlMode) {
+                                   String projectId, String taskDescription,
+                                   ProjectPolicy projectPolicy, ControlMode controlMode) {
+        // 0. Readiness 前置过滤（开关，不是乘数）
+        List<Plugin> readinessFiltered = new ArrayList<>();
+        List<RoutingDecision.RejectedCandidate> readinessRejected = new ArrayList<>();
+        if (readinessManager != null) {
+            for (Plugin p : availablePlugins) {
+                ReadinessResult r = readinessManager.check(p.id());
+                if (r.isRunnable()) {
+                    readinessFiltered.add(p);
+                } else {
+                    readinessRejected.add(RoutingDecision.RejectedCandidate.builder()
+                            .pluginId(p.id())
+                            .reason("Readiness: " + r.state() + " - " + r.diagnosis())
+                            .score(0.0)
+                            .build());
+                }
+            }
+        } else {
+            readinessFiltered.addAll(availablePlugins);
+        }
+
+        if (readinessFiltered.isEmpty()) {
+            log.warn("All candidates filtered by Readiness for capability '{}'", capability);
+            return RoutingDecision.builder()
+                    .capability(capability)
+                    .reason("No plugin with READY/DEGRADED readiness for: " + capability)
+                    .needsApproval(true)
+                    .rejectedCandidates(readinessRejected)
+                    .build();
+        }
+
         // 1. 找到声明了该能力的候选
-        List<Plugin> candidates = availablePlugins.stream()
+        List<Plugin> candidates = readinessFiltered.stream()
                 .filter(p -> p.metadata().capabilities().contains(capability))
                 .toList();
 
@@ -65,6 +92,7 @@ public class CapabilityRouter {
                     .capability(capability)
                     .reason("No capable plugin found for: " + capability)
                     .needsApproval(true)
+                    .rejectedCandidates(readinessRejected)
                     .build();
         }
 
@@ -85,11 +113,13 @@ public class CapabilityRouter {
 
         if (filtered.isEmpty()) {
             log.warn("All candidates blocked by Policy for capability '{}'", capability);
+            List<RoutingDecision.RejectedCandidate> allRejected = new ArrayList<>(readinessRejected);
+            allRejected.addAll(rejected);
             return RoutingDecision.builder()
                     .capability(capability)
                     .reason("All plugins blocked by Project Policy")
                     .needsApproval(true)
-                    .rejectedCandidates(rejected)
+                    .rejectedCandidates(allRejected)
                     .build();
         }
 
@@ -116,6 +146,9 @@ public class CapabilityRouter {
                 || controlMode == ControlMode.MANUAL;
 
         // 6. 构建决策
+        List<RoutingDecision.RejectedCandidate> allRejected = new ArrayList<>(readinessRejected);
+        allRejected.addAll(rejected);
+
         RoutingDecision.RoutingDecisionBuilder builder = RoutingDecision.builder()
                 .selectedPluginId(bestPluginId)
                 .selectedPluginName(bestPlugin.metadata().name())
@@ -129,11 +162,11 @@ public class CapabilityRouter {
                     .nextAction("Wait for user approval before executing");
         }
 
-        if (!rejected.isEmpty()) {
-            builder.rejectedCandidates(rejected);
+        if (!allRejected.isEmpty()) {
+            builder.rejectedCandidates(allRejected);
         }
 
-        log.info("Routing decision: capability={} → plugin={} (score={})",
+        log.info("Routing decision: capability={} -> plugin={} (score={})",
                 capability, bestPluginId, scores.get(bestPluginId));
 
         return builder.build();
@@ -143,7 +176,7 @@ public class CapabilityRouter {
      * 8 因素评分
      */
     private double calculateScore(Plugin plugin, String capability,
-                                   String taskDescription, ProjectPolicy projectPolicy) {
+                                    String taskDescription, ProjectPolicy projectPolicy) {
         double total = 0.0;
 
         // 因素 1：项目级历史表现（30%）
@@ -176,23 +209,19 @@ public class CapabilityRouter {
 
     /** 因素 1：项目级历史表现 */
     private double projectPerformanceScore(Plugin plugin, String capability) {
-        // TODO: 从 ProjectAgentProfile 读取
-        // 冷启动默认值
         Double reliability = plugin.metadata().reliabilityScore();
         return reliability != null ? reliability : 0.5;
     }
 
     /** 因素 2：任务类型级表现 */
     private double taskTypeScore(Plugin plugin, String taskType) {
-        // TODO: 从 performanceByTaskType 读取
-        return 0.5; // 冷启动中性值
+        return 0.5;
     }
 
     /** 因素 3：哲学匹配 */
     private double philosophyScore(Plugin plugin, String taskDescription) {
         List<String> philosophies = plugin.metadata().philosophies();
-        if (philosophies.isEmpty()) return 0.75; // 中性
-
+        if (philosophies.isEmpty()) return 0.75;
         List<String> hints = inferPhilosophyHints(taskDescription);
         long matches = hints.stream()
                 .filter(philosophies::contains)
@@ -207,13 +236,20 @@ public class CapabilityRouter {
 
     /** 因素 5：用户偏好 */
     private double userPreferenceScore(Plugin plugin) {
-        // TODO: 从 UserPreferences 读取
         return 0.0;
     }
 
-    /** 因素 6：可用性 */
+    /** 因素 6：可用性（基于 ReadinessState） */
     private double availabilityScore(Plugin plugin) {
         try {
+            if (readinessManager != null) {
+                ReadinessResult r = readinessManager.check(plugin.id());
+                return switch (r.state()) {
+                    case READY -> 1.0;
+                    case DEGRADED -> 0.5;
+                    default -> 0.0;
+                };
+            }
             return plugin.inspect() != Plugin.PluginHealth.DOWN ? 1.0 : 0.0;
         } catch (Exception e) {
             return 0.0;
@@ -225,7 +261,7 @@ public class CapabilityRouter {
         double penalty = 0;
         Long latency = meta.avgLatencyMs();
         if (latency != null) {
-            penalty += latency / 1000.0; // 每毫秒 0.001 分
+            penalty += latency / 1000.0;
         }
         Double cost = meta.costPerInvocation();
         if (cost != null) {
@@ -236,7 +272,6 @@ public class CapabilityRouter {
 
     /** Routing Lesson 加成 */
     private double routingLessonBonus(Plugin plugin, String capability, String taskDescription) {
-        // TODO: 从 RoutingLesson 读取
         return 0.0;
     }
 

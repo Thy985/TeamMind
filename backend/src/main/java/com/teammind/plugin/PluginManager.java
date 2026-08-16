@@ -3,6 +3,7 @@ package com.teammind.plugin;
 import com.teammind.common.EventType;
 import com.teammind.event.EventBus;
 import com.teammind.event.TeamMindEvent;
+import com.teammind.runtime.ReadinessManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -24,12 +25,14 @@ import java.util.function.Function;
 public class PluginManager {
 
     private final EventBus eventBus;
+    private final ReadinessManager readinessManager;
     private final Map<String, Plugin> plugins = new ConcurrentHashMap<>();
     private final Map<String, Plugin> pluginsById = new ConcurrentHashMap<>();
     private final Map<Plugin.PluginType, List<Plugin>> pluginsByType = new ConcurrentHashMap<>();
 
-    public PluginManager(EventBus eventBus) {
+    public PluginManager(EventBus eventBus, ReadinessManager readinessManager) {
         this.eventBus = eventBus;
+        this.readinessManager = readinessManager;
     }
 
     /**
@@ -133,16 +136,32 @@ public class PluginManager {
     }
 
     /**
-     * 获取可用 Plugin（健康状态为 HEALTHY 或 DEGRADED）
+     * 获取可用 Plugin（Readiness 为 READY 或 DEGRADED）
      */
     public List<Plugin> getAvailable() {
         return pluginsById.values().stream()
                 .filter(p -> {
-                    try {
-                        return p.inspect() != Plugin.PluginHealth.DOWN;
-                    } catch (Exception e) {
-                        return false;
+                    if (readinessManager == null) {
+                        try { return p.inspect() != Plugin.PluginHealth.DOWN; }
+                        catch (Exception e) { return false; }
                     }
+                    return readinessManager.check(p.id()).isRunnable();
+                })
+                .toList();
+    }
+
+    /**
+     * 获取所有 READY 的 Agent Plugin（严格过滤，DEGRADED 不包含）
+     */
+    public List<Plugin> getReadyAgents() {
+        return pluginsById.values().stream()
+                .filter(p -> p.type() == Plugin.PluginType.AGENT)
+                .filter(p -> {
+                    if (readinessManager == null) {
+                        try { return p.inspect() == Plugin.PluginHealth.HEALTHY; }
+                        catch (Exception e) { return false; }
+                    }
+                    return readinessManager.check(p.id()).state() == com.teammind.common.ReadinessState.READY;
                 })
                 .toList();
     }

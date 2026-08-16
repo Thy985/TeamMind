@@ -2,7 +2,9 @@ package com.teammind.plugin.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.teammind.common.DependencyType;
 import com.teammind.common.EventType;
+import com.teammind.common.PluginDependency;
 import com.teammind.event.EventBus;
 import com.teammind.event.TeamMindEvent;
 import com.teammind.plugin.Plugin;
@@ -174,6 +176,97 @@ public class CodexPlugin implements Plugin {
             return exit == 0 ? PluginHealth.HEALTHY : PluginHealth.DEGRADED;
         } catch (Exception e) {
             return PluginHealth.UNHEALTHY;
+        }
+    }
+
+    @Override
+    public List<PluginDependency> dependencies() {
+        return List.of(
+                // Codex CLI 本身
+                PluginDependency.builder()
+                        .type(DependencyType.EXECUTABLE)
+                        .name("codex-cli")
+                        .checkCommand("codex --version")
+                        .minVersion("0.144.5")
+                        .build(),
+                // 本地 LLM provider（由 Codex++ 提供）
+                PluginDependency.builder()
+                        .type(DependencyType.SERVICE)
+                        .name("local-provider")
+                        .endpoint("http://127.0.0.1:57321/v1/models")
+                        .healthCheckTimeoutMs(5000)
+                        .recoveryProcess("D:\\ProgramFiles\\Codex++\\codex-plus-plus.exe")
+                        .recoveryArgs(new String[]{"--minimized"})
+                        .build(),
+                // 认证配置
+                PluginDependency.builder()
+                        .type(DependencyType.AUTH)
+                        .name("codex-auth")
+                        .checkCommand("test -f ~/.codex/config.toml")
+                        .build()
+        );
+    }
+
+    @Override
+    public boolean attemptRecovery() {
+        log.info("[{}] Attempting recovery...", ID);
+        try {
+            Process p = new ProcessBuilder(
+                    "D:\\ProgramFiles\\Codex++\\codex-plus-plus.exe", "--minimized")
+                    .start();
+            log.info("[{}] Launched Codex++ (PID={})", ID, p.pid());
+
+            // Wait up to 30s for provider to become ready
+            for (int i = 0; i < 6; i++) {
+                Thread.sleep(5000);
+                if (checkProviderReady()) {
+                    log.info("[{}] Provider recovered successfully", ID);
+                    return true;
+                }
+            }
+            log.warn("[{}] Provider did not become ready after 30s", ID);
+            return false;
+        } catch (Exception e) {
+            log.error("[{}] Recovery failed: {}", ID, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public Map<String, Object> diagnose() {
+        Map<String, Object> details = new HashMap<>();
+        details.put("cli_version", VERSION);
+        details.put("provider_endpoint", "http://127.0.0.1:57321/v1/models");
+        details.put("config_path", System.getProperty("user.home") + "/.codex/config.toml");
+
+        try {
+            java.net.URL url = new java.net.URL("http://127.0.0.1:57321/v1/models");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            int status = conn.getResponseCode();
+            conn.disconnect();
+            details.put("provider_status", status == 200 ? "reachable" : "unreachable (" + status + ")");
+        } catch (Exception e) {
+            details.put("provider_status", "unreachable: " + e.getMessage());
+        }
+
+        return details;
+    }
+
+    private boolean checkProviderReady() {
+        try {
+            java.net.URL url = new java.net.URL("http://127.0.0.1:57321/v1/models");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(2000);
+            int status = conn.getResponseCode();
+            conn.disconnect();
+            return status == 200;
+        } catch (Exception e) {
+            return false;
         }
     }
 

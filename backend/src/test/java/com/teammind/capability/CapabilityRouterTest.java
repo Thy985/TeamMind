@@ -19,7 +19,7 @@ class CapabilityRouterTest {
 
     @BeforeEach
     void setUp() {
-        router = new CapabilityRouter(new PolicyEngine());
+        router = new CapabilityRouter(new PolicyEngine(), null);
         policy = ProjectPolicy.builder().build();
     }
 

@@ -68,6 +68,29 @@ public interface Plugin {
     PluginHealth inspect();
 
     /**
+     * 声明此 Plugin 依赖的运行时资源（CLI、服务、认证、环境变量等）。
+     * 由 Runtime 统一执行检查和恢复，不硬编码到 invoke() 里。
+     */
+    default List<com.teammind.common.PluginDependency> dependencies() {
+        return List.of();
+    }
+
+    /**
+     * 尝试自动恢复不可用的依赖。
+     * 返回 true 表示恢复成功，false 表示需要用户介入。
+     */
+    default boolean attemptRecovery() {
+        return false;
+    }
+
+    /**
+     * 返回详细诊断信息（谁调用 inspect() 不够详细时用这个）
+     */
+    default Map<String, Object> diagnose() {
+        return Map.of();
+    }
+
+    /**
      * 生命周期钩子 — 插件加载时调用
      */
     default void onLoad() {}

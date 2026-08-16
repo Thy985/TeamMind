@@ -19,7 +19,7 @@ class PluginRegistryTest {
     @BeforeEach
     void setUp() {
         com.teammind.event.EventBus bus = new com.teammind.event.EventBus(new com.fasterxml.jackson.databind.ObjectMapper());
-        manager = new PluginManager(bus);
+        manager = new PluginManager(bus, null);
         registry = new PluginRegistry(bus, manager);
     }
 
