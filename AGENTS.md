@@ -68,6 +68,7 @@ user.email = 1850833838@qq.com
 - **P0 Fix** ✅ Codex non-interactive mode + Cancel/Resume implementation (commit `b1a16ba4`)
 - **P0 Fix** ✅ Real Handoff Verification — 6 tests pass, handoff chain verified (commit `2513f088`)
 - **P0 Fix** ✅ Real CLI Integration — Claude Code verified (commit `a872f838`)
+- **P0 Fix** ✅ Atomcode CLI verified — success=true, 4.5s (commit `2bee0b33`)
 
 ## 测试基线
 
