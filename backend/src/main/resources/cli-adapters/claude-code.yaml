@@ -16,4 +16,4 @@ dependencies:
     check_command: "claude --version"
   - type: AUTH
     name: claude-auth
-    check_command: "test -f ~/.claude.json || test -f ~/.config/claude.json"
+    check_command: "test -f ~/.claude.json || test -f ~/.config/claude.json || test -f ~/.claude/settings.json"

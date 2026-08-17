@@ -3,66 +3,83 @@ package com.teammind.plugin.adapter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * WindowsCommandHelper — Windows 平台特殊命令处理
  *
- * 解决的问题：
- *   Java 的 ProcessBuilder 不能直接执行 PowerShell 脚本（.ps1）
- *   也不能直接执行 .bat 文件（除非 .bat 在 PATHEXT 中）
+ * 解决问题：
+ *   Java ProcessBuilder 不能直接执行 PowerShell 脚本 (.ps1)
+ *   Windows 上的 "bash" 可能是 WSL 启动器（不是真的 Git Bash/MSYS2）
  *
  * 自动检测以下场景：
- *   - 命令以 .ps1 结尾 → 用 powershell.exe -File 包装
- *   - 命令以 .bat 或 .cmd 结尾 → 直接执行（PATHEXT 通常已支持）
- *   - 命令是裸名称（如 "codex"） → 先在 PATH 中查找 .exe / .ps1 / .bat
- *     如果找到 .ps1，则需要通过 powershell.exe 执行
+ *   - 命令以 .ps1 结尾 → 用 powershell.exe -Command "& '<script>' args" 包装
+ *   - 命令以 .bat 或 .cmd 结尾 → 用 cmd.exe /c 包装
+ *   - 命令是裸名称（如 "codex"）→ 先在 PATH 中查找 .exe / .ps1 / .bat
  *
- * 非 Windows 平台直接返回原命令。
+ * 关键：使用 Git Bash (MSYS2) 而不是 PATH 中的 bash（可能是 WSL）。
+ * WSL 的 $HOME=/home/lenovo，看不到 Windows 的 /c/Users/lenovo/.codex/。
+ * Git Bash 的 $HOME=/c/Users/lenovo，能正确访问 Windows 主目录。
  */
 @Slf4j
 public final class WindowsCommandHelper {
 
     private WindowsCommandHelper() {}
 
-    /**
-     * 检测系统是否为 Windows
-     */
+    /** 已找到的 Git Bash 路径（缓存） */
+    private static volatile String cachedBashPath = null;
+
     public static boolean isWindows() {
         String os = System.getProperty("os.name", "").toLowerCase();
         return os.contains("windows");
     }
 
     /**
-     * 将命令包装为可执行的形式
-     *
-     * 输入: ["codex", "--prompt", "hello"] 或 ["claude", "--print", "hello"]
-     * 输出（Windows + .ps1）: ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\path\\to\\codex.ps1", "--prompt", "hello"]
-     * 输出（Windows + .bat）: ["cmd.exe", "/c", "codex.bat", ...]
-     * 输出（非 Windows）: 原样返回
+     * 查找 Git Bash (MSYS2) 路径
+     * 优先使用标准安装位置，避免 PATH 中的 WSL bash
      */
+    private static String findGitBash() {
+        if (cachedBashPath != null) {
+            return cachedBashPath;
+        }
+        String[] candidates = {
+            "C:\\Program Files\\Git\\bin\\bash.exe",
+            "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+            "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+            "C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe"
+        };
+        for (String path : candidates) {
+            if (Files.isRegularFile(Paths.get(path))) {
+                log.debug("Found Git Bash at: {}", path);
+                cachedBashPath = path;
+                return path;
+            }
+        }
+        log.warn("Git Bash not found in standard locations, falling back to PATH 'bash'");
+        cachedBashPath = "bash";
+        return "bash";
+    }
+
     public static List<String> wrap(List<String> command) {
         if (!isWindows() || command.isEmpty()) {
             return command;
         }
         String first = command.get(0);
-        // 如果已经是 powershell.exe / cmd.exe / 绝对路径含可执行扩展，跳过
         if (isAlreadyWrapped(first)) {
             return command;
         }
 
-        // 1) 如果是 .ps1 脚本的绝对路径 → 用 powershell.exe 包装
         if (first.toLowerCase().endsWith(".ps1")) {
             return wrapPowerShell(first, command.subList(1, command.size()));
         }
 
-        // 2) 如果是 .bat / .cmd 脚本的绝对路径 → 用 cmd.exe /c 包装
         if (first.toLowerCase().endsWith(".bat") || first.toLowerCase().endsWith(".cmd")) {
             return wrapCmd(first, command.subList(1, command.size()));
         }
 
-        // 3) 如果是裸命令 → 在 PATH 中查找，找到 .ps1 就包装
         ResolvedScript resolved = resolveInPath(first);
         if (resolved != null) {
             log.debug("Resolved '{}' to {} script at {}", first, resolved.type, resolved.path);
@@ -72,36 +89,30 @@ public final class WindowsCommandHelper {
             if ("bat".equals(resolved.type) || "cmd".equals(resolved.type)) {
                 return wrapCmd(resolved.path, command.subList(1, command.size()));
             }
-            // exe — 用绝对路径替换
             List<String> result = new ArrayList<>();
             result.add(resolved.path);
             result.addAll(command.subList(1, command.size()));
             return result;
         }
 
-        // 找不到或就是 .exe，留给 ProcessBuilder 自己去处理
         return command;
     }
 
     /**
-     * 包装单元素命令（用于 health check 的简单场景）
-     *
-     * 如果命令看起来是 shell 表达式（包含 ||, &&, ~, $ 等），会尝试用 bash -c 包装
+     * 包装单元素命令
+     * shell 表达式用 Git Bash (MSYS2) 包装
      */
     public static List<String> wrap(String command) {
         if (!isWindows()) {
             return List.of("bash", "-c", command);
         }
         if (looksLikeShellExpression(command)) {
-            // shell 表达式 → 用 bash -c 包装
-            return List.of("bash", "-c", command);
+            String gitBash = findGitBash();
+            return List.of(gitBash, "-c", command);
         }
         return wrap(List.of(command.split(" ")));
     }
 
-    /**
-     * 判断命令是否像 shell 表达式
-     */
     private static boolean looksLikeShellExpression(String command) {
         return command.contains("||") || command.contains("&&") || command.contains("~")
                 || command.contains("$") || command.contains("|")
@@ -117,8 +128,6 @@ public final class WindowsCommandHelper {
     }
 
     private static List<String> wrapPowerShell(String scriptPath, List<String> restArgs) {
-        // 使用 -Command "& '<script>' args..." 而不是 -File '<script>' args
-        // -File 在 Java ProcessBuilder 下会挂起（30+ 秒），-Command 1 秒完成
         StringBuilder sb = new StringBuilder();
         sb.append("& '").append(scriptPath).append("'");
         for (String arg : restArgs) {
@@ -134,13 +143,8 @@ public final class WindowsCommandHelper {
         return result;
     }
 
-    /**
-     * 对参数进行 PowerShell 风格的引号转义
-     * 单引号包裹，内部单引号转义为两个单引号
-     */
     private static String quoteArg(String arg) {
         if (arg == null) return "''";
-        // 如果包含空格或特殊字符，用单引号包裹
         if (arg.contains(" ") || arg.contains("'") || arg.contains("$")
                 || arg.contains("\"") || arg.contains("&") || arg.contains("|")) {
             return "'" + arg.replace("'", "''") + "'";
@@ -157,14 +161,10 @@ public final class WindowsCommandHelper {
         return result;
     }
 
-    /**
-     * 在 PATH 中查找命令对应的实际脚本/可执行文件
-     */
     private static ResolvedScript resolveInPath(String command) {
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null) return null;
 
-        // 先尝试 PATHEXT 扩展
         String[] extensions;
         String pathext = System.getenv("PATHEXT");
         if (pathext != null && !pathext.isBlank()) {
@@ -172,7 +172,6 @@ public final class WindowsCommandHelper {
         } else {
             extensions = new String[]{".exe", ".bat", ".cmd", ".ps1", ""};
         }
-        // .ps1 不在 PATHEXT 中需手动添加
         boolean hasPs1 = false;
         for (String ext : extensions) {
             if (".ps1".equals(ext)) { hasPs1 = true; break; }
@@ -184,8 +183,6 @@ public final class WindowsCommandHelper {
             extensions = withPs1;
         }
 
-        // 优先检查 .exe → .bat → .cmd → .ps1
-        // 排序: ps1 优先（因为 Java ProcessBuilder 直接调用 ps1 会失败）
         String[] extPriority = {".ps1", ".exe", ".bat", ".cmd"};
 
         for (String dir : pathEnv.split(File.pathSeparator)) {

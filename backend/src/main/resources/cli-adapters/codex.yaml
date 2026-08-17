@@ -2,6 +2,11 @@
 cli_id: codex
 command: "codex"
 args:
+  - "exec"
+  - "-c"
+  - "approval_policy=never"
+  - "-c"
+  - "sandbox_permissions=danger-full-access"
   - "<prompt>"
 output_format: "text"
 timeout_minutes: 60

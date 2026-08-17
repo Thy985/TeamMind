@@ -438,7 +438,7 @@ public class PipelineOrchestrator {
                 Plugin.PluginContext pluginCtx = new Plugin.PluginContext(
                         projectId, context.getTaskId(),
                         stepDef.getPrompt() != null ? Map.of("prompt", prompt) : Map.of(),
-                        context.getObjective() != null ? context.getObjective() : ".",
+                        ".",  // projectPath: 默认当前目录（避免使用 objective 文本）
                         artifactMap,
                         plugin.type() == Plugin.PluginType.VERIFIER
                                 ? List.of("verification")
@@ -552,6 +552,136 @@ public class PipelineOrchestrator {
         return taskRepo.findById(taskId)
                 .map(Task::getProjectId)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+    }
+
+    /**
+     * 取消正在执行的 Pipeline
+     *
+     * @param executionId 执行 ID
+     */
+    public void cancelPipeline(String executionId) {
+        TaskExecution execution = executionRepo.findById(executionId).orElse(null);
+        if (execution == null) {
+            log.warn("Execution {} not found for cancellation", executionId);
+            return;
+        }
+
+        // 检查是否可以取消
+        if (execution.getExecutionState() != TaskExecutionState.RUNNING) {
+            log.warn("Execution {} is not RUNNING, state={}", executionId, execution.getExecutionState());
+            return;
+        }
+
+        log.info("Cancelling execution {}", executionId);
+
+        // 取消当前运行的 step
+        List<ExecutionStep> steps = stepRepo.findByExecutionIdOrderByStartedAtAsc(executionId);
+        ExecutionStep currentStep = steps.stream()
+                .filter(s -> s.getState() == ExecutionStepState.RUNNING)
+                .findFirst()
+                .orElse(null);
+
+        if (currentStep != null) {
+            // 取消当前 step 的 agent invocation
+            List<AgentInvocation> invocations = invocationRepo.findByStepId(currentStep.getId());
+            for (AgentInvocation invocation : invocations) {
+                Optional<Plugin> pluginOpt = pluginManager.findById(invocation.getPluginId());
+                pluginOpt.ifPresent(plugin -> {
+                    try {
+                        plugin.cancel();
+                        log.info("Cancelled plugin '{}' for step '{}'", plugin.id(), currentStep.getStepName());
+                    } catch (Exception e) {
+                        log.warn("Failed to cancel plugin '{}': {}", plugin.id(), e.getMessage());
+                    }
+                });
+            }
+
+            currentStep.setState(ExecutionStepState.FAILED);
+            currentStep.setCompletedAt(LocalDateTime.now());
+            stepRepo.save(currentStep);
+        }
+
+        // 更新 execution 状态
+        execution.setState(TaskState.CANCELLED);
+        execution.setExecutionState(TaskExecutionState.CANCELLED);
+        execution.setCompletedAt(LocalDateTime.now());
+        execution.setErrorReason("Pipeline cancelled by user");
+        execution = executionRepo.save(execution);
+
+        // 更新 task 状态
+        Task task = taskRepo.findById(execution.getTaskId()).orElse(null);
+        if (task != null) {
+            task.setState(TaskState.CANCELLED);
+            task.setCompletedAt(LocalDateTime.now());
+            taskRepo.save(task);
+        }
+
+        log.info("Execution {} cancelled successfully", executionId);
+
+        // Publish cancellation event
+        if (wsPublisher != null) {
+            wsPublisher.publishLog(execution.getTaskId(), "pipeline", "orchestrator",
+                    "Pipeline execution cancelled");
+            Map<String, Object> snapshot = new HashMap<>();
+            snapshot.put("state", execution.getState().name());
+            snapshot.put("executionState", execution.getExecutionState().name());
+            wsPublisher.publishStateUpdate(execution.getTaskId(), snapshot);
+        }
+    }
+
+    /**
+     * 暂停正在执行的 Pipeline
+     *
+     * @param executionId 执行 ID
+     */
+    public void pausePipeline(String executionId) {
+        TaskExecution execution = executionRepo.findById(executionId).orElse(null);
+        if (execution == null) {
+            log.warn("Execution {} not found for pause", executionId);
+            return;
+        }
+
+        if (execution.getExecutionState() != TaskExecutionState.RUNNING) {
+            log.warn("Execution {} is not RUNNING, state={}", executionId, execution.getExecutionState());
+            return;
+        }
+
+        log.info("Pausing execution {}", executionId);
+        execution.setExecutionState(TaskExecutionState.PAUSE_REQUESTED);
+        execution = executionRepo.save(execution);
+
+        if (wsPublisher != null) {
+            wsPublisher.publishLog(execution.getTaskId(), "pipeline", "orchestrator",
+                    "Pipeline pause requested");
+        }
+    }
+
+    /**
+     * 恢复暂停的 Pipeline
+     *
+     * @param executionId 执行 ID
+     */
+    public void resumePipeline(String executionId) {
+        TaskExecution execution = executionRepo.findById(executionId).orElse(null);
+        if (execution == null) {
+            log.warn("Execution {} not found for resume", executionId);
+            return;
+        }
+
+        if (execution.getExecutionState() != TaskExecutionState.PAUSE_REQUESTED
+                && execution.getExecutionState() != TaskExecutionState.PAUSED) {
+            log.warn("Execution {} is not paused, state={}", executionId, execution.getExecutionState());
+            return;
+        }
+
+        log.info("Resuming execution {}", executionId);
+        execution.setExecutionState(TaskExecutionState.RUNNING);
+        execution = executionRepo.save(execution);
+
+        if (wsPublisher != null) {
+            wsPublisher.publishLog(execution.getTaskId(), "pipeline", "orchestrator",
+                    "Pipeline resumed");
+        }
     }
 
     /**
