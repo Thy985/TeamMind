@@ -64,7 +64,8 @@ user.email = 1850833838@qq.com
 - **Phase 4-Sprint 4** ✅ Knowledge Promotion — ADR/Lesson persistence + noise filtering
 - **Phase 4-UI** ✅ Design system enforcement — hardcoded colors/fonts → CSS variables (184→0, 122→0)
 - **Phase 4-CLI** ✅ Activate atomcode + fix pipeline data flow + E2E assertions (15 tests)
-- **Gate Audit Pre-Alpha** ⚠️ Honest 10-dimension audit — Runtime Prototype, NOT Product Alpha yet
+- **Gate Audit Pre-Alpha** ✅ Honest 10-dimension audit (commit `948a4e37`)
+- **P0 Fix** ✅ Codex non-interactive mode + Cancel/Resume implementation (commit `b1a16ba4`)
 
 ## 测试基线
 
