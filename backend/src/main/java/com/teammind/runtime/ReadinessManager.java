@@ -3,6 +3,7 @@ package com.teammind.runtime;
 import com.teammind.common.*;
 import com.teammind.plugin.Plugin;
 import com.teammind.plugin.PluginManager;
+import com.teammind.plugin.adapter.WindowsCommandHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -221,10 +222,10 @@ public class ReadinessManager {
         }
 
         try {
-            Process p = new ProcessBuilder(dep.checkCommand().split(" "))
+            Process p = new ProcessBuilder(WindowsCommandHelper.wrap(dep.checkCommand()))
                     .redirectErrorStream(true)
                     .start();
-            boolean finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            boolean finished = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
             int exit = finished ? p.exitValue() : -1;
 
             Map<String, Object> details = new LinkedHashMap<>();
@@ -388,7 +389,7 @@ public class ReadinessManager {
                 cmd.addAll(List.of(dep.recoveryArgs()));
             }
 
-            ProcessBuilder pb = new ProcessBuilder(cmd);
+            ProcessBuilder pb = new ProcessBuilder(WindowsCommandHelper.wrap(cmd));
             pb.redirectErrorStream(true);
             // 后台启动，不阻塞
             pb.start();

@@ -71,4 +71,5 @@ user.email = 1850833838@qq.com
 - 后端 E2E 集成测试：**13 pass, 0 failures**（E2EIntegrationTest）
 - 全量测试：**315 pass, 0 failures**
 - 前端构建：`✓ built in 3.31s (4357 modules)`
-- E2E 真实集成：Codex CLI ✓、Claude Code CLI ✓、Codex++ provider ✓（端口 57321）
+- E2E 真实集成：Codex CLI ✓、Claude Code CLI ✓、Atomcode CLI ✓
+- 全量测试：**336 pass, 0 failures**（+2 atomcode E2E）

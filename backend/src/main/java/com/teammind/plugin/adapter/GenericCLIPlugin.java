@@ -245,7 +245,7 @@ public class GenericCLIPlugin implements CLIAdapter {
                 cmd.add(arg);
             }
         }
-        return cmd;
+        return WindowsCommandHelper.wrap(cmd);
     }
 
     private String resolvePrompt(PluginContext context) {
@@ -306,15 +306,19 @@ public class GenericCLIPlugin implements CLIAdapter {
             CLIConfig.HealthCheck hc = config.healthCheck();
             if (hc.command() == null) {
                 // 无健康检查配置，用 command --version 尝试
-                Process p = new ProcessBuilder(config.command(), "--version")
+                List<String> hcCmd = WindowsCommandHelper.wrap(
+                        List.of(config.command(), "--version"));
+                Process p = new ProcessBuilder(hcCmd)
                         .redirectErrorStream(true).start();
-                boolean finished = p.waitFor(5, TimeUnit.SECONDS);
+                boolean finished = p.waitFor(30, TimeUnit.SECONDS);
                 return finished && p.exitValue() == 0
                         ? PluginHealth.HEALTHY : PluginHealth.DEGRADED;
             }
-            Process p = new ProcessBuilder(hc.command().split(" "))
+            List<String> hcCmd = WindowsCommandHelper.wrap(
+                    List.of(hc.command().split(" ")));
+            Process p = new ProcessBuilder(hcCmd)
                     .redirectErrorStream(true).start();
-            boolean finished = p.waitFor(5, TimeUnit.SECONDS);
+            boolean finished = p.waitFor(30, TimeUnit.SECONDS);
             int exit = finished ? p.exitValue() : -1;
             return exit == hc.expectedExit() ? PluginHealth.HEALTHY : PluginHealth.DEGRADED;
         } catch (Exception e) {

@@ -6,6 +6,7 @@ import com.teammind.common.EventType;
 import com.teammind.event.EventBus;
 import com.teammind.event.TeamMindEvent;
 import com.teammind.plugin.Plugin;
+import com.teammind.plugin.adapter.WindowsCommandHelper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
@@ -173,7 +174,8 @@ public class ClaudeCodePlugin implements Plugin {
     @Override
     public PluginHealth inspect() {
         try {
-            Process p = new ProcessBuilder("claude", "--version").redirectErrorStream(true).start();
+            Process p = new ProcessBuilder(WindowsCommandHelper.wrap("claude --version"))
+                    .redirectErrorStream(true).start();
             boolean finished = p.waitFor(5, TimeUnit.SECONDS);
             int exit = finished ? p.exitValue() : -1;
             return exit == 0 ? PluginHealth.HEALTHY : PluginHealth.DEGRADED;
@@ -194,8 +196,9 @@ public class ClaudeCodePlugin implements Plugin {
             cmd.add("--output-format");
             cmd.add("json");
         }
-        log.debug("[{}] Command: {}", ID, cmd);
-        ProcessBuilder pb = new ProcessBuilder(cmd);
+        List<String> wrapped = WindowsCommandHelper.wrap(cmd);
+        log.debug("[{}] Command: {}", ID, wrapped);
+        ProcessBuilder pb = new ProcessBuilder(wrapped);
         pb.directory(Path.of(projectPath).toFile());
         pb.redirectErrorStream(true);
         return pb.start();
