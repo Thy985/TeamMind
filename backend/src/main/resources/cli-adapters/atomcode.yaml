@@ -2,13 +2,11 @@
 cli_id: atomcode
 command: "atomcode"
 args:
-  - "--interactive"
+  - "-p"
   - "<prompt>"
-output_format: "ndjson"
+output_format: "text"
 timeout_minutes: 45
 working_dir: "."
-env:
-  ATOMCODE_API_KEY: "${ENV:ATOMCODE_API_KEY}"
 health_check:
   command: "atomcode --version"
   expected_exit: 0
