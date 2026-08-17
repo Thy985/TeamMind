@@ -69,6 +69,7 @@ user.email = 1850833838@qq.com
 - **P0 Fix** ✅ Real Handoff Verification — 6 tests pass, handoff chain verified (commit `2513f088`)
 - **P0 Fix** ✅ Real CLI Integration — Claude Code verified (commit `a872f838`)
 - **P0 Fix** ✅ Atomcode CLI verified — success=true, 4.5s (commit `2bee0b33`)
+- **P0 Fix** ✅ Codex stdin issue fixed — direct node call bypasses PowerShell wrapper (commit `67ce21d0`)
 
 ## 测试基线
 
