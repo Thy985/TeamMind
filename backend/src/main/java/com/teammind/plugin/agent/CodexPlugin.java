@@ -275,22 +275,25 @@ public class CodexPlugin implements Plugin {
     // ─── Internal helpers ──────────────────────────────────────
 
     private Process buildProcess(String prompt, String projectPath) throws java.io.IOException {
+        // 直接调用 node + codex.js，绕过 PowerShell wrapper
+        // PowerShell wrapper 在有 stdin PIPE 时会触发 $MyInvocation.ExpectingInput
+        // 导致 Rust CLI 报 "stdin is not a terminal" 错误
         List<String> cmd = new ArrayList<>();
-        cmd.add("codex");
-        cmd.add("exec");  // 非交互模式（codex exec <prompt>）
-        // 绕过交互式提示，允许非终端环境运行
+        cmd.add("node");
+        cmd.add(System.getProperty("user.home") + "/AppData/Roaming/npm/node_modules/@openai/codex/bin/codex.js");
+        cmd.add("exec");
         cmd.add("-c");
         cmd.add("approval_policy=never");
         cmd.add("-c");
         cmd.add("sandbox_permissions=danger-full-access");
+        cmd.add("--skip-git-repo-check");
         cmd.add(prompt);
         if (projectPath != null && !projectPath.isBlank() && !projectPath.equals(".")) {
-            cmd.add("--cd");
+            cmd.add("-C");
             cmd.add(projectPath);
         }
-        List<String> wrapped = WindowsCommandHelper.wrap(cmd);
-        log.debug("[{}] Command: {}", ID, wrapped);
-        ProcessBuilder pb = new ProcessBuilder(wrapped);
+        log.debug("[{}] Command: {}", ID, cmd);
+        ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(Path.of(projectPath).toFile());
         pb.redirectErrorStream(true);
         pb.redirectInput(ProcessBuilder.Redirect.PIPE); // 提供空 stdin

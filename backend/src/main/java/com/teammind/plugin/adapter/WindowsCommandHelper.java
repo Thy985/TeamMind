@@ -183,7 +183,9 @@ public final class WindowsCommandHelper {
             extensions = withPs1;
         }
 
-        String[] extPriority = {".ps1", ".exe", ".bat", ".cmd"};
+        // 优先 .cmd (更稳定，不依赖 PowerShell pipeline)
+        // Node.js CLI 通常同时有 .ps1 和 .cmd，.cmd 在无 TTY 环境更可靠
+        String[] extPriority = {".cmd", ".ps1", ".exe", ".bat"};
 
         for (String dir : pathEnv.split(File.pathSeparator)) {
             if (dir == null || dir.isBlank()) continue;
