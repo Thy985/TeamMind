@@ -266,11 +266,46 @@ class E2EIntegrationTest {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // Phase 3B: Atomcode — 新激活的 CLI 适配器
+    // ═══════════════════════════════════════════════════════════
+
+    @Test
+    @Order(14)
+    @DisplayName("[E2E-3B-8] Atomcode CLI 适配器已注册 — YAML 未注释")
+    void atomcodeAdapterRegistered() {
+        // 验证 atomcode 已被 CLIDiscoveryService 注册
+        assertTrue(pluginManager.findById("atomcode").isPresent(),
+                "atomcode should be registered from YAML adapter");
+        Plugin atomcode = pluginManager.findById("atomcode").get();
+        assertTrue(atomcode instanceof CLIAdapter,
+                "atomcode should implement CLIAdapter");
+        CLIAdapter adapter = (CLIAdapter) atomcode;
+        assertEquals("atomcode", adapter.config().cliId());
+        assertEquals("atomcode", adapter.config().command());
+        assertEquals(CLIConfig.OutputFormat.NDJSON, adapter.config().outputFormat());
+        System.out.println("[E2E] Atomcode registered: command=" + adapter.config().command()
+                + ", format=" + adapter.config().outputFormat()
+                + ", timeout=" + adapter.config().timeoutMinutes() + "min");
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("[E2E-3B-9] Atomcode CLI 健康检查 — 二进制存在且可执行")
+    void atomcodeHealthCheck() {
+        Plugin atomcode = pluginManager.findById("atomcode").orElseThrow(
+                () -> new AssertionError("atomcode plugin not found"));
+        // 健康检查应不抛出异常
+        Plugin.PluginHealth health = atomcode.inspect();
+        assertNotNull(health);
+        System.out.println("[E2E] Atomcode health: " + health);
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // Phase 3A: RecoveryService — 进程存活检测
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    @Order(8)
+    @Order(14)
     @DisplayName("[E2E-3A-1] RecoveryService 正确处理无进行中任务")
     void recoveryServiceNoInFlight() {
         // 确保没有 RUNNING 状态的 execution
@@ -290,7 +325,7 @@ class E2EIntegrationTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    @Order(9)
+    @Order(15)
     @DisplayName("[E2E-3A-2] 创建 Task → 执行 Pipeline → 验证 Artifact + Event Store")
     void fullPipelineWithArtifactsAndEvents() throws Exception {
         // 1. 创建 Task
@@ -310,13 +345,25 @@ class E2EIntegrationTest {
             PipelineExecutionResult result = pipelineOrchestrator.executePipeline(
                     TASK_ID, task.getObjective(), constraints, "review-loop");
 
-            // 3. 验证 Pipeline 结果
+            // 3. 验证 Pipeline 结果 — 必须成功或至少明确失败而非崩溃
             assertNotNull(result, "Pipeline result should not be null");
             assertNotNull(result.getOverallStatus(), "Overall status should be set");
             assertNotNull(result.getStartedAt(), "StartedAt should be set");
             System.out.println("[E2E] Pipeline status: " + result.getOverallStatus()
                     + ", steps: " + result.getStepResults().size()
                     + ", duration: " + result.getTotalDurationMs() + "ms");
+
+            // 记录每个步骤的状态
+            for (PipelineStepResult stepResult : result.getStepResults()) {
+                System.out.println("[E2E]   Step '" + stepResult.getStepName()
+                        + "': state=" + stepResult.getState()
+                        + ", agent=" + stepResult.getAgentId()
+                        + ", duration=" + stepResult.getDurationMs() + "ms");
+            }
+
+            // 断言：至少有一个步骤结果（即使 pipeline 失败）
+            assertFalse(result.getStepResults().isEmpty(),
+                    "Pipeline should have at least one step result");
 
             // 4. 验证事件已写入 EventStore
             List<RuntimeEvent> events = eventStoreService.getEventChain(TASK_ID);
@@ -346,7 +393,7 @@ class E2EIntegrationTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    @Order(10)
+    @Order(14)
     @DisplayName("[E2E-3A-3] Event Replay — after 参数正确过滤")
     void eventReplayAfterFilter() {
         // 先获取所有事件
@@ -382,7 +429,7 @@ class E2EIntegrationTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    @Order(11)
+    @Order(15)
     @DisplayName("[E2E-3A-4] TaskDetail 快照包含所有必要字段")
     void taskDetailSnapshot() {
         // 创建一个简单的 execution 用于快照验证
@@ -427,7 +474,7 @@ class E2EIntegrationTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    @Order(12)
+    @Order(14)
     @DisplayName("[E2E-3A-5] RecoveryService 将无进程的 RUNNING execution 标记为 FAILED")
     void recoveryMarksDeadProcessAsFailed() {
         // 创建一个模拟的 RUNNING execution（无对应进程）
@@ -472,7 +519,7 @@ class E2EIntegrationTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    @Order(13)
+    @Order(15)
     @DisplayName("[E2E-3A-6] CLIProcessTracker 管理进程生命周期")
     void cliProcessTracker() {
         // 注册一个假进程

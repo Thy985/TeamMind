@@ -469,13 +469,21 @@ public class PipelineOrchestrator {
                         .build();
             }
 
-            // Create artifact
+            // Create artifact with files_changed data
             String artifactId = UUID.randomUUID().toString();
+            Map<String, Object> artifactData = new HashMap<>();
+            artifactData.put("step", stepDef.getName());
+            artifactData.put("agent", agentId);
+            // Extract files_changed from output if available
+            String filesChanged = extractFilesChanged(output);
+            if (filesChanged != null) {
+                artifactData.put("files_changed", filesChanged);
+            }
             Artifact artifact = Artifact.builder()
                     .id(artifactId)
                     .type(stepDef.getOutput() != null ? stepDef.getOutput() : "UNKNOWN")
                     .summary(output)
-                    .data(Map.of("step", stepDef.getName(), "agent", agentId))
+                    .data(artifactData)
                     .createdAt(LocalDateTime.now())
                     .build();
 
@@ -511,6 +519,33 @@ public class PipelineOrchestrator {
 
     private long calculateTotalDuration(List<PipelineStepResult> results) {
         return results.stream().mapToLong(PipelineStepResult::getDurationMs).sum();
+    }
+
+    /**
+     * 从 CLI 输出中提取 files_changed 列表
+     * 匹配形如 "Files changed: file1.ts, file2.ts" 或 "file: src/main.ts" 的行
+     */
+    private String extractFilesChanged(String output) {
+        if (output == null || output.isBlank()) return null;
+        // Try to match "Files changed: ..." pattern
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?i)files?\\s*(?:changed|modified|created|deleted)?\\s*:?\\s*(.+)",
+                java.util.regex.Pattern.MULTILINE);
+        var m = p.matcher(output);
+        if (m.find()) {
+            String line = m.group(1).trim();
+            if (!line.isBlank() && line.length() < 500) return line;
+        }
+        // Try to match "file: path" pattern
+        StringBuilder sb = new StringBuilder();
+        java.util.regex.Pattern fileP = java.util.regex.Pattern.compile(
+                "(?i)(?:file|path)\\s*:\\s*(\\S+)", java.util.regex.Pattern.MULTILINE);
+        var fm = fileP.matcher(output);
+        while (fm.find()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(fm.group(1));
+        }
+        return sb.length() > 0 ? sb.toString() : null;
     }
 
     private String findProjectId(String taskId) {

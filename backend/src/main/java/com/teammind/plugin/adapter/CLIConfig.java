@@ -85,7 +85,7 @@ public record CLIConfig(
             args.add(s);
         }
 
-        Map<String, String> env = Map.of();
+        Map<String, String> env = new java.util.HashMap<>();
         Object envObj = map.get("env");
         if (envObj instanceof Map<?, ?> rawEnv) {
             rawEnv.forEach((k, v) -> { if (k instanceof String ks && v instanceof String vs) env.put(ks, vs); });

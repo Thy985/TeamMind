@@ -1,20 +1,18 @@
-# Atomcode CLI Adapter (example — placeholder for future integration)
-# To enable: uncomment and add to the project
-#
-# cli_id: atomcode
-# command: "atomcode"
-# args:
-#   - "--interactive"
-#   - "<prompt>"
-# output_format: "ndjson"
-# timeout_minutes: 45
-# working_dir: "."
-# env:
-#   ATOMCODE_API_KEY: "${ENV:ATOMCODE_API_KEY}"
-# health_check:
-#   command: "atomcode --version"
-#   expected_exit: 0
-# dependencies:
-#   - type: EXECUTABLE
-#     name: atomcode-cli
-#     check_command: "atomcode --version"
+# Atomcode CLI Adapter
+cli_id: atomcode
+command: "atomcode"
+args:
+  - "--interactive"
+  - "<prompt>"
+output_format: "ndjson"
+timeout_minutes: 45
+working_dir: "."
+env:
+  ATOMCODE_API_KEY: "${ENV:ATOMCODE_API_KEY}"
+health_check:
+  command: "atomcode --version"
+  expected_exit: 0
+dependencies:
+  - type: EXECUTABLE
+    name: atomcode-cli
+    check_command: "atomcode --version"
