@@ -293,6 +293,7 @@ public class CodexPlugin implements Plugin {
         ProcessBuilder pb = new ProcessBuilder(wrapped);
         pb.directory(Path.of(projectPath).toFile());
         pb.redirectErrorStream(true);
+        pb.redirectInput(ProcessBuilder.Redirect.PIPE); // 提供空 stdin
         return pb.start();
     }
 

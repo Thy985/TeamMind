@@ -72,6 +72,7 @@ public class GenericCLIPlugin implements CLIAdapter {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(Path.of(workDir).toFile());
         pb.redirectErrorStream(true);
+        pb.redirectInput(ProcessBuilder.Redirect.PIPE); // 提供空 stdin
 
         // 注入环境变量
         Map<String, String> env = pb.environment();
