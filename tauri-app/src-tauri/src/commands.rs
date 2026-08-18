@@ -8,7 +8,7 @@ use tauri::State;
 
 // Re-export process_supervisor commands for use in run()
 #[allow(unused_imports)]
-use crate::process_supervisor::{process_spawn, process_is_alive, process_read_stdout, process_cancel, process_wait_exit};
+use crate::process_supervisor::{process_spawn, process_is_alive, process_read_stdout, process_read_stderr, process_cancel, process_wait_exit};
 
 // ─── State ────────────────────────────────────────────────────────
 
@@ -72,7 +72,7 @@ pub fn run<S: Send + Default + 'static>() {
             agent_list, agent_get, agent_toggle,
             knowledge_save, knowledge_get_by_task,
             // M2: Process Supervisor (Rust Provider)
-            process_spawn, process_is_alive, process_read_stdout, process_cancel, process_wait_exit,
+            process_spawn, process_is_alive, process_read_stdout, process_read_stderr, process_cancel, process_wait_exit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
