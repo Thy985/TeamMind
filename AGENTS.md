@@ -65,6 +65,8 @@ user.email = 1850833838@qq.com
 - **Phase 4-UI** ✅ Design system enforcement — hardcoded colors/fonts → CSS variables (184→0, 122→0)
 - **Phase 4-CLI** ✅ Activate atomcode + fix pipeline data flow + E2E assertions (15 tests)
 - **Gate Audit Pre-Alpha** ⚠️ Honest 10-dimension audit — Runtime Prototype, NOT Product Alpha yet
+- **M1** ✅ Tauri Host scaffold + HostAdapter abstraction + Strangler Fig roadmap (commit `b7a0d45d`)
+- **M2** 🔄 Process Supervisor → Rust — Java 接口已提取，Rust stub 已创建，待 cargo check
 
 ## 测试基线
 

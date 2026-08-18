@@ -35,14 +35,17 @@ public class CLIDiscoveryService implements CommandLineRunner {
     private final PluginManager pluginManager;
     private final EventBus eventBus;
     private final CLIProcessTracker processTracker;
+    private final ProcessSupervisor processSupervisor;
     private static final String ADAPTERS_DIR = "cli-adapters";
 
     public CLIDiscoveryService(PluginManager pluginManager,
-                                EventBus eventBus,
-                                CLIProcessTracker processTracker) {
+                                 EventBus eventBus,
+                                 CLIProcessTracker processTracker,
+                                 ProcessSupervisor processSupervisor) {
         this.pluginManager = pluginManager;
         this.eventBus = eventBus;
         this.processTracker = processTracker;
+        this.processSupervisor = processSupervisor;
     }
 
     @Override
@@ -101,7 +104,7 @@ public class CLIDiscoveryService implements CommandLineRunner {
             }
 
             CLIConfig config = CLIConfig.fromMap(map);
-            GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus);
+            GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus, processSupervisor);
             pluginManager.register(plugin);
 
             log.info("Discovered CLI adapter: {} (command={}, format={})",

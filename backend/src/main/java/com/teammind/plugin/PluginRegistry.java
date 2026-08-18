@@ -7,6 +7,7 @@ import com.teammind.plugin.agent.ClaudeCodePlugin;
 import com.teammind.plugin.agent.CodexPlugin;
 import com.teammind.plugin.verifier.GitVerifier;
 import com.teammind.plugin.verifier.TestRunnerVerifier;
+import com.teammind.runtime.ProcessSupervisor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -30,10 +31,12 @@ public class PluginRegistry {
 
     private final EventBus eventBus;
     private final PluginManager pluginManager;
+    private final ProcessSupervisor processSupervisor;
 
-    public PluginRegistry(EventBus eventBus, PluginManager pluginManager) {
+    public PluginRegistry(EventBus eventBus, PluginManager pluginManager, ProcessSupervisor processSupervisor) {
         this.eventBus = eventBus;
         this.pluginManager = pluginManager;
+        this.processSupervisor = processSupervisor;
     }
 
     /**
@@ -116,7 +119,7 @@ public class PluginRegistry {
             Map<String, Object> map = yaml.load(is);
             if (map == null) return;
             CLIConfig config = CLIConfig.fromMap(map);
-            GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus);
+            GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus, processSupervisor);
             pluginManager.register(plugin);
             log.info("Registered YAML adapter: {} (command={}, format={})",
                     config.cliId(), config.command(), config.outputFormat());
