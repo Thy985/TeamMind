@@ -168,12 +168,15 @@ class RealACPBridge:
         try:
             ctx = spawn_agent_process(client, *cmd)
             self._conn, self._proc = await asyncio.wait_for(ctx.__aenter__(), timeout=30.0)
-            await self._conn.initialize(
+            init_resp = await self._conn.initialize(
                 protocol_version=PROTOCOL_VERSION,
                 client_capabilities=ClientCapabilities(),
                 client_info=Implementation(name="teammind", title="TeamMind", version="0.1.0"),
             )
-            agent_name = self._conn.agent_info.name if hasattr(self._conn, 'agent_info') and self._conn.agent_info else "?"
+            # Extract agent name from initialize response
+            agent_name = "?"
+            if hasattr(init_resp, 'agent_info') and init_resp.agent_info:
+                agent_name = init_resp.agent_info.name
             emit(self._out, {"type": "ready", "agent": agent_name, "mode": "real", "backend": self._backend or "auto"})
             self._ready = True
             return True
