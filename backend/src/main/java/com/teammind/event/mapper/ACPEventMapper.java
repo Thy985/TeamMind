@@ -144,10 +144,10 @@ public class ACPEventMapper implements EventMapper {
             meta.put("summary_length", summary.length());
         }
 
+        // Agent 完成 ≠ Evidence 已验证。
+        // 独立的 Verifier（GitVerifier / TestRunner）负责验证，此处只发 TASK_COMPLETED。
         if (exitCode == 0) {
             events.add(TeamMindEvent.of(EventType.TASK_COMPLETED, taskId, pluginId, role, meta));
-            events.add(TeamMindEvent.of(EventType.EVIDENCE_VERIFIED, taskId, pluginId, role,
-                    Map.of("status", "completed", "source", "completion")));
         } else {
             events.add(TeamMindEvent.of(EventType.TASK_FAILED, taskId, pluginId, role, meta));
         }

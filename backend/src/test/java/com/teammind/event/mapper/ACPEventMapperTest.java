@@ -118,14 +118,14 @@ class ACPEventMapperTest {
     // ─── completion ───────────────────────────────────────────────
 
     @Test
-    @DisplayName("completion exit_code=0 → TASK_COMPLETED + EVIDENCE_VERIFIED")
-    void completionSuccessGeneratesTwoEvents() throws Exception {
+    @DisplayName("completion exit_code=0 → TASK_COMPLETED only (Evidence verified separately by Verifier)")
+    void completionSuccessGeneratesTaskCompletedOnly() throws Exception {
         JsonNode node = MAPPER.readTree("{\"type\":\"completion\",\"exit_code\":0,\"summary\":\"Task done\"}");
         var events = mapper.map(new EventMapper.CliEvent(null, node, "completion"), ctx);
 
-        assertEquals(2, events.size());
+        // Agent 完成 ≠ Evidence 已验证，不在此处发 EVIDENCE_VERIFIED
+        assertEquals(1, events.size());
         assertEquals(EventType.TASK_COMPLETED, events.get(0).type());
-        assertEquals(EventType.EVIDENCE_VERIFIED, events.get(1).type());
         assertEquals(0, events.get(0).metadata().get("exit_code"));
     }
 
@@ -231,7 +231,8 @@ class ACPEventMapperTest {
         assertTrue(types.contains(EventType.TASK_FAILED));
         assertTrue(types.contains(EventType.ERROR_RECOVERABLE));
         assertTrue(types.contains(EventType.ERROR_CRITICAL));
-        assertTrue(types.contains(EventType.EVIDENCE_VERIFIED));
+        // Note: EVIDENCE_VERIFIED is NOT emitted by ACPEventMapper —
+        // it is produced by Verifiers (GitVerifier, TestRunner) after independent checks.
         assertTrue(types.contains(EventType.PROCESS_STARTED));
         assertTrue(types.contains(EventType.AGENT_STARTED));
         assertEquals(12, types.size());
