@@ -59,6 +59,8 @@ public class GenericCLIPlugin implements CLIAdapter {
     @Override
     public CLIConfig config() { return config; }
 
+    protected EventBus getEventBus() { return eventBus; }
+
     @Override
     public void startProcess(String prompt, String workDir) throws IOException {
         if (isAlive()) {
@@ -183,7 +185,7 @@ public class GenericCLIPlugin implements CLIAdapter {
         }
     }
 
-    private void parseNDJSON(String line, String taskId, PluginChunkHandler handler) {
+    protected void parseNDJSON(String line, String taskId, PluginChunkHandler handler) {
         try {
             // 简单 JSON 解析（不依赖 Jackson 避免循环依赖）
             String type = extractField(line, "type");
@@ -214,7 +216,7 @@ public class GenericCLIPlugin implements CLIAdapter {
         }
     }
 
-    private void parseStructured(String line, String taskId, PluginChunkHandler handler) {
+    protected void parseStructured(String line, String taskId, PluginChunkHandler handler) {
         // Structured 格式：整体 JSON，逐 key 处理
         try {
             String type = extractField(line, "event_type");
@@ -225,7 +227,7 @@ public class GenericCLIPlugin implements CLIAdapter {
         }
     }
 
-    private void parseText(String line, String taskId, PluginChunkHandler handler) {
+    protected void parseText(String line, String taskId, PluginChunkHandler handler) {
         // Text 格式：逐行都是有效内容
         if (handler != null) handler.onChunk(line);
         if (taskId != null && !line.isBlank()) {

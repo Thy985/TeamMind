@@ -1,0 +1,30 @@
+# Codex ACP Adapter — structured JSON event stream
+# Uses Codex's native --json flag for ACP-compatible output
+cli_id: codex-acp
+command: "node"
+args:
+  - "${ENV:CX_PATH}"
+  - "exec"
+  - "--json"
+  - "--approve-for-me"
+  - "--sandbox"
+  - "danger-full-access"
+  - "--skip-git-repo-check"
+  - "<prompt>"
+output_format: "ndjson"
+timeout_minutes: 60
+working_dir: "."
+health_check:
+  command: "codex --version"
+  expected_exit: 0
+dependencies:
+  - type: EXECUTABLE
+    name: codex-cli
+    check_command: "codex --version"
+  - type: SERVICE
+    name: local-provider
+    endpoint: "http://127.0.0.1:57321/v1/models"
+    health_check_timeout_ms: 5000
+  - type: AUTH
+    name: codex-auth
+    check_command: "test -f ~/.codex/config.toml"
