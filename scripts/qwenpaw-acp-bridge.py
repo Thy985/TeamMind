@@ -107,9 +107,29 @@ def run_mock_bridge(in_fp, out_fp):
 
 # ─── Real ACP bridge ─────────────────────────────────────────────────
 
-async def _real_bridge_task(in_fp, out_fp):
-    """Run the real ACP bridge in a background task."""
-    cmd = [sys.executable, "-m", "qwenpaw", "acp", "--local-diagnostics"]
+async def _real_bridge_task(in_fp, out_fp, runtime_provider=None, backend=None):
+    """Run the real ACP bridge in a background task.
+
+    Args:
+        runtime_provider: --runtime-provider flag (e.g. "openai-env")
+        backend: ACP agent backend to use ("qwenpaw" or "opencode")
+    """
+    if backend == "opencode":
+        import shutil
+        cmd = [shutil.which("opencode"), "acp"]
+    elif backend == "qwenpaw":
+        cmd = [sys.executable, "-m", "qwenpaw", "acp", "--local-diagnostics"]
+        if runtime_provider:
+            cmd.extend(["--runtime-provider", runtime_provider])
+    else:
+        # Default: try opencode first (fast), fall back to qwenpaw
+        import shutil
+        if shutil.which("opencode"):
+            cmd = [shutil.which("opencode"), "acp"]
+        else:
+            cmd = [sys.executable, "-m", "qwenpaw", "acp", "--local-diagnostics"]
+            if runtime_provider:
+                cmd.extend(["--runtime-provider", runtime_provider])
 
     class _Client:
         def __init__(self, out):
@@ -132,6 +152,7 @@ async def _real_bridge_task(in_fp, out_fp):
                 else:
                     text = getattr(content, "text", "") or ""
                 if text:
+                    logger.info("CHUNK: %s", text[:50])
                     await self._emit({"type": "chunk", "text": text})
             elif kind == "agent_thought_chunk":
                 await self._emit({"type": "think", "text": "[thinking]"})
@@ -139,6 +160,10 @@ async def _real_bridge_task(in_fp, out_fp):
                 await self._emit({"type": "tool",
                                   "name": getattr(up, "name", "tool"),
                                   "input": getattr(up, "raw_input", None)})
+            else:
+                logger.info("UPDATE: %s", kind)
+                if kind:
+                    await self._emit({"type": "raw_update", "kind": kind})
 
         async def request_permission(self, opts, sid, tc, **kw):
             from acp.schema import AllowedOutcome, RequestPermissionResponse
@@ -233,6 +258,10 @@ def main():
     parser = argparse.ArgumentParser(description="QwenPaw ACP Bridge for TeamMind")
     parser.add_argument("--mode", choices=["real", "mock"], default="real",
                         help="Bridge mode (default: real)")
+    parser.add_argument("--runtime-provider", choices=["openai-env"],
+                        help="Use ephemeral runtime (bypasses workspace boot)")
+    parser.add_argument("--backend", choices=["qwenpaw", "opencode"], default=None,
+                        help="ACP backend (default: auto-detect)")
     args = parser.parse_args()
 
     in_fp = sys.stdin.buffer
@@ -250,7 +279,7 @@ def main():
 
     logger.info("Attempting real QwenPaw ACP connection...")
     try:
-        asyncio.run(_real_bridge_task(in_fp, out_fp))
+        asyncio.run(_real_bridge_task(in_fp, out_fp, args.runtime_provider, args.backend))
     except Exception as e:
         emit(out_fp, {"type": "error", "message": f"Real ACP failed: {e}"})
         sys.exit(1)
