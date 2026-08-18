@@ -5,6 +5,11 @@ import com.teammind.plugin.adapter.CLIConfig;
 import com.teammind.plugin.adapter.GenericCLIPlugin;
 import com.teammind.plugin.agent.ClaudeCodePlugin;
 import com.teammind.plugin.agent.CodexPlugin;
+import com.teammind.plugin.transport.AgentTransportFactory;
+import com.teammind.plugin.transport.AgentTransport;
+import com.teammind.plugin.transport.LegacyTransport;
+import com.teammind.plugin.transport.ACPTransport;
+import com.teammind.plugin.transport.AgentConfig;
 import com.teammind.plugin.verifier.GitVerifier;
 import com.teammind.plugin.verifier.TestRunnerVerifier;
 import lombok.extern.slf4j.Slf4j;
@@ -30,10 +35,12 @@ public class PluginRegistry {
 
     private final EventBus eventBus;
     private final PluginManager pluginManager;
+    private final AgentTransportFactory transportFactory;
 
     public PluginRegistry(EventBus eventBus, PluginManager pluginManager) {
         this.eventBus = eventBus;
         this.pluginManager = pluginManager;
+        this.transportFactory = new AgentTransportFactory(eventBus);
     }
 
     /**
@@ -44,8 +51,65 @@ public class PluginRegistry {
         register(new CodexPlugin(eventBus));
         register(new GitVerifier(eventBus));
         register(new TestRunnerVerifier(eventBus));
+
+        // 注册 Transport 实例（供外部查询 capability 和生命周期管理）
+        registerTransport("codex", createDefaultTransports("codex"));
+        registerTransport("claude-code", createDefaultTransports("claude-code"));
+
         log.info("PluginRegistry: {} built-in plugins registered", pluginManager.getAll().size());
         registerYAMLAdapters();
+    }
+
+    /**
+     * 为已知 Agent 创建 Legacy + ACP 两个 Transport 实例
+     */
+    private void registerTransport(String agentId, List<AgentTransport> transports) {
+        for (AgentTransport t : transports) {
+            log.info("Registered transport: agent={} type={}", agentId, t.type());
+        }
+    }
+
+    /**
+     * 为指定 Agent 创建默认 Transport 列表
+     * 当前只创建 Legacy（ACP bridge 尚未安装时为 null-safe）
+     */
+    private List<AgentTransport> createDefaultTransports(String agentId) {
+        List<AgentTransport> transports = new java.util.ArrayList<>();
+        try {
+            CLIConfig legacyConfig = buildLegacyConfig(agentId);
+            transports.add(new LegacyTransport(legacyConfig, eventBus));
+            log.info("Created LegacyTransport for agent={}", agentId);
+        } catch (Exception e) {
+            log.warn("Failed to create LegacyTransport for agent={}: {}", agentId, e.getMessage());
+        }
+        // ACPTransport 需要 bridge 可执行文件，暂跳过（P1 完善）
+        return transports;
+    }
+
+    private CLIConfig buildLegacyConfig(String agentId) {
+        String yamlDir = "cli-adapters";
+        try {
+            var dir = new org.springframework.core.io.ClassPathResource(yamlDir);
+            if (dir.getFile().isDirectory()) {
+                java.io.File[] files = dir.getFile().listFiles((d, name) -> name.contains(agentId) && (name.endsWith(".yaml") || name.endsWith(".yml")));
+                if (files != null && files.length > 0) {
+                    try (java.io.InputStream is = Files.newInputStream(files[0].toPath())) {
+                        org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                        Map<String, Object> map = yaml.load(is);
+                        return CLIConfig.fromMap(map);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        // Fallback
+        return CLIConfig.of(agentId, agentId, CLIConfig.OutputFormat.TEXT);
+    }
+
+    /**
+     * 获取 Transport Factory（供外部创建新 Transport 实例）
+     */
+    public AgentTransportFactory getTransportFactory() {
+        return transportFactory;
     }
 
     private void register(Plugin plugin) {
