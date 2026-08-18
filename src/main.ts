@@ -3,9 +3,14 @@ import { createPinia } from 'pinia'
 import router from './router'
 import App from './App.vue'
 import { setupGlobalErrorHandler } from './plugins/errorHandler'
+import { initHostAdapter } from './api/hostAdapter'
 
 // Import styles
 import './styles/index.css'
+
+// Initialize Host Adapter (auto-detects web vs Tauri mode)
+const adapter = initHostAdapter()
+console.log(`[TeamMind] HostAdapter: ${adapter.mode} mode`)
 
 // Create app
 const app = createApp(App)
