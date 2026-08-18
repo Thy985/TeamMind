@@ -2,6 +2,7 @@ package com.teammind.plugin.transport;
 
 import com.teammind.event.EventBus;
 import com.teammind.plugin.adapter.CLIConfig;
+import com.teammind.runtime.ProcessSupervisor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -23,9 +24,11 @@ import lombok.extern.slf4j.Slf4j;
 public class AgentTransportFactory {
 
     private final EventBus eventBus;
+    private final ProcessSupervisor processSupervisor;
 
-    public AgentTransportFactory(EventBus eventBus) {
+    public AgentTransportFactory(EventBus eventBus, ProcessSupervisor processSupervisor) {
         this.eventBus = eventBus;
+        this.processSupervisor = processSupervisor;
     }
 
     /**
@@ -33,17 +36,26 @@ public class AgentTransportFactory {
      */
     public AgentTransport createTransport(AgentConfig config) {
         String tt = config.transportType();
+        String agentId = config.agentId();
+
+        // QwenPaw has its own transport (Python bridge via stdin/stdout JSONL)
+        if ("qwenpaw".equals(agentId)) {
+            String scriptPath = (String) config.acpConfig().getOrDefault("bridgeScript", "scripts/qwenpaw-acp-bridge.py");
+            log.info("Creating QwenPawACPTransport for agent={} script={}", agentId, scriptPath);
+            return new QwenPawACPTransport(eventBus, scriptPath);
+        }
+
         if (AgentConfig.TRANSPORT_ACP.equals(tt)) {
             String bridge = config.acpBridge() != null
                     ? config.acpBridge()
-                    : defaultBridgeForAgent(config.agentId());
-            log.info("Creating ACPTransport for agent={} bridge={}", config.agentId(), bridge);
+                    : defaultBridgeForAgent(agentId);
+            log.info("Creating ACPTransport for agent={} bridge={}", agentId, bridge);
             return new ACPTransport(eventBus, bridge);
         }
         // null or TRANSPORT_LEGACY → fallback to legacy
         CLIConfig cliConfig = buildCLIConfig(config);
-        log.info("Creating LegacyTransport for agent={} transport={}", config.agentId(), tt);
-        return new LegacyTransport(cliConfig, eventBus);
+        log.info("Creating LegacyTransport for agent={} transport={}", agentId, tt);
+        return new LegacyTransport(cliConfig, eventBus, processSupervisor);
     }
 
     /**

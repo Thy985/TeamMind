@@ -1,0 +1,21 @@
+# QwenPaw CLI Adapter — Research / Consultant Role
+cli_id: qwenpaw
+command: "python"
+args:
+  - "<script_path>/qwenpaw-acp-bridge.py"
+  # Script path resolved at runtime by QwenPawACPTransport
+output_format: "jsonl"
+timeout_minutes: 15
+working_dir: "."
+transport: "acp"          # uses QwenPawACPTransport
+role: "consultant"         # TeamMind role assignment
+model: "qwen-plus"         # default model slot
+dependencies:
+  - type: EXECUTABLE
+    name: python3
+    check_command: "python --version"
+  - type: FILE
+    name: qwenpaw-acp-bridge
+    path: "<script_path>/qwenpaw-acp-bridge.py"
+# Note: When QwenPaw full deps are installed, the bridge auto-detects
+# and uses real ACP protocol. Currently runs in echo-fallback mode.
