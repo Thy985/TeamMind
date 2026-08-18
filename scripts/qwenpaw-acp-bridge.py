@@ -166,14 +166,15 @@ async def _real_bridge_task(in_fp, out_fp):
             )
             emit(out_fp, {"type": "ready", "agent": "qwenpaw", "mode": "real", "pid": proc.pid})
 
-            # Read stdin via StreamReader
+            # Read stdin line by line (thread-based, avoids Windows pipe issues)
             loop = asyncio.get_event_loop()
-            reader = asyncio.StreamReader()
-            protocol = asyncio.StreamReaderProtocol(reader)
-            await loop.connect_read_pipe(lambda: protocol, in_fp)
-
             while True:
-                raw_line = await asyncio.wait_for(reader.readline(), timeout=3.0)
+                try:
+                    raw_line = await asyncio.wait_for(
+                        loop.run_in_executor(None, in_fp.readline),
+                        timeout=3.0)
+                except (asyncio.TimeoutError, OSError):
+                    break
                 if not raw_line:
                     break
                 line = raw_line.decode("utf-8").strip()
@@ -222,24 +223,37 @@ def run_real_bridge(in_fp, out_fp):
 
 
 def main():
+    """Run bridge.
+
+    Modes:
+      real  (default): Use real QwenPaw ACP. Errors if unavailable.
+      mock: Use EchoAgent for POC testing only.
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description="QwenPaw ACP Bridge for TeamMind")
+    parser.add_argument("--mode", choices=["real", "mock"], default="real",
+                        help="Bridge mode (default: real)")
+    args = parser.parse_args()
+
     in_fp = sys.stdin.buffer
     out_fp = sys.stdout.buffer
 
-    if HAS_ACP:
-        logger.info("Attempting real QwenPaw ACP connection...")
-        try:
-            # Give real ACP 5s to connect; if workspace is slow, switch to mock
-            asyncio.run(asyncio.wait_for(
-                _real_bridge_task(in_fp, out_fp),
-                timeout=5.0))
-        except asyncio.TimeoutError:
-            logger.warning("Real ACP took too long, falling back to mock")
-            run_mock_bridge(in_fp, out_fp)
-        except Exception as e:
-            logger.warning("Real ACP failed: %s, falling back to mock", e)
-            run_mock_bridge(in_fp, out_fp)
-    else:
+    if args.mode == "mock":
         run_mock_bridge(in_fp, out_fp)
+        return
+
+    # Real mode: no silent fallback
+    if not HAS_ACP:
+        emit(out_fp, {"type": "error",
+                      "message": "ACP SDK not available. Install with: pip install agent-client-protocol"})
+        sys.exit(1)
+
+    logger.info("Attempting real QwenPaw ACP connection...")
+    try:
+        asyncio.run(_real_bridge_task(in_fp, out_fp))
+    except Exception as e:
+        emit(out_fp, {"type": "error", "message": f"Real ACP failed: {e}"})
+        sys.exit(1)
 
 
 if __name__ == "__main__":
