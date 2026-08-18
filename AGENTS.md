@@ -48,7 +48,8 @@ user.email = 1850833838@qq.com
 |-------|------|------|
 | **M0** | 冻结 Runtime Contract | ✅ 完成 — `docs/contracts/runtime-contract.md` |
 | **M1** | Tauri Host（双模式共存） | ✅ 完成 — `tauri-app/` scaffold + HostAdapter |
-| **M2** | Process Supervisor → Rust | 🔄 进行中 — Java 接口已提取，Rust stub 在 `w7-codex-runtime` |
+| **M2** | Process Supervisor → Rust | ✅ 完成 — Java 接口 + Rust impl（`w7-codex-runtime`） |
+| **M2.5** | ACP Event Mapper POC | ✅ 完成 — ACPEventMapper + ACPCLIPlugin + 25 tests |
 | **M3** | Workspace/Git → Rust | ⏳ |
 | **M4** | Event/Streaming → Rust | ⏳ |
 | **M5** | State/Persistence → Rust | ⏳ |
