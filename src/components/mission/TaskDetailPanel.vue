@@ -92,9 +92,49 @@ async function handleRetry() {
   }
 }
 
+async function handlePause() {
+  try {
+    loading.value = true
+    await taskDetailApi.pause(props.taskId)
+    await loadSnapshot()
+  } catch (e) {
+    console.error('Pause failed:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleResume() {
+  try {
+    loading.value = true
+    await taskDetailApi.resume(props.taskId)
+    await loadSnapshot()
+  } catch (e) {
+    console.error('Resume failed:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleCancel() {
+  try {
+    loading.value = true
+    await taskDetailApi.cancel(props.taskId)
+    await loadSnapshot()
+  } catch (e) {
+    console.error('Cancel failed:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
 // ─── Derived data ───────────────────────────────────────────
 const currentStep = computed(() => snapshot.value?.currentStep || 'implement')
 const currentAgent = computed(() => snapshot.value?.agentId || 'codex')
+const executionState = computed(() => snapshot.value?.executionState || 'UNKNOWN')
+const canPause = computed(() => executionState.value === 'RUNNING')
+const canResume = computed(() => executionState.value === 'PAUSED' || executionState.value === 'PAUSE_REQUESTED')
+const canCancel = computed(() => ['RUNNING', 'PAUSED', 'PAUSE_REQUESTED', 'RETRYING'].includes(executionState.value))
 const readinessState = computed(() => {
   const r = snapshot.value?.readiness?.[currentAgent.value] as TaskReadiness | undefined
   return r?.state || 'UNKNOWN'
@@ -259,6 +299,37 @@ onUnmounted(() => {
         </div>
 
         <NSpace>
+          <NButton
+            v-if="canPause"
+            size="small"
+            type="warning"
+            ghost
+            @click="handlePause"
+            :loading="loading"
+          >
+            <template #icon><NIcon :component="PauseOutline" /></template>
+            Pause
+          </NButton>
+          <NButton
+            v-if="canResume"
+            size="small"
+            type="success"
+            @click="handleResume"
+            :loading="loading"
+          >
+            <template #icon><NIcon :component="PlayOutline" /></template>
+            Resume
+          </NButton>
+          <NButton
+            v-if="canCancel"
+            size="small"
+            type="error"
+            ghost
+            @click="handleCancel"
+            :loading="loading"
+          >
+            Cancel
+          </NButton>
           <NButton
             v-if="needsApproval"
             type="primary"

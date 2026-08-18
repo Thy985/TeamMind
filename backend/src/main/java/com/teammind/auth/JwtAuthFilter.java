@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -18,19 +17,10 @@ import java.util.Set;
 /**
  * JWT 认证过滤器
  *
- * 拦截所有请求，解析 Authorization Bearer token，
- * 将当前用户写入 AuthContext（ThreadLocal），请求结束时清除。
- *
- * 采用"强制认证"策略：
- *  - 除白名单（如登录）外，所有 /api/** 业务接口都要求携带有效 Bearer token，
- *    否则返回 401。
- *  - 携带有效 token → 设置认证用户并放行。
- *  - 未携带 token / token 非法 / 用户被禁用 → 拒绝（401）。
- *
- * 这样后端不再"形同虚设"，前端路由守卫无法被 curl 绕过。
+ * 通过 SecurityConfig 条件注册，不使用 @Component。
+ * teammind.security.enabled=true 时注册，否则不加载。
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 

@@ -28,7 +28,7 @@ import java.util.Optional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class RecoveryService implements CommandLineRunner {
+public class RecoveryService implements CommandLineRunner, RuntimeLifecycle {
 
     private final TaskExecutionRepository executionRepo;
     private final AgentInvocationRepository invocationRepo;
@@ -38,6 +38,11 @@ public class RecoveryService implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        // initialize() 由 RuntimeBootstrap @PostConstruct 调用，此处不再重复
+    }
+
+    @Override
+    public void initialize() throws Exception {
         log.info("RecoveryService: scanning for in-flight executions after restart");
 
         // ── Step 1: 恢复 in-flight executions ──────────────────

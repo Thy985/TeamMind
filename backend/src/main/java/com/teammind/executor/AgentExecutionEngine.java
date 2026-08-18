@@ -6,7 +6,7 @@ import com.teammind.config.SQLiteWriteLockService;
 import com.teammind.entity.Agent;
 import com.teammind.llm.*;
 import com.teammind.repository.AgentRepository;
-import com.teammind.websocket.WSEventPublisher;
+import com.teammind.common.EventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,7 +39,7 @@ public class AgentExecutionEngine {
     private final LLMService llmService;
     private final LLMTrackingService trackingService;
     private final AgentRepository agentRepository;
-    private final WSEventPublisher eventPublisher;
+    private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final ExecutorService executorService;
     private final SQLiteWriteLockService writeLockService;
@@ -72,7 +72,7 @@ public class AgentExecutionEngine {
             LLMService llmService,
             LLMTrackingService trackingService,
             AgentRepository agentRepository,
-            WSEventPublisher eventPublisher,
+            EventPublisher eventPublisher,
             ObjectMapper objectMapper,
             @Qualifier("agentExecutorService") ExecutorService executorService,
             SQLiteWriteLockService writeLockService) {
@@ -442,8 +442,10 @@ public class AgentExecutionEngine {
                 if (dynamic != null) {
                     return dynamic;
                 }
-                // 未知工具，使用模拟
-                return simulateTool(toolName, arguments);
+                // 未知工具：明确失败，不再模拟
+                throw new UnsupportedOperationException(
+                    "Unknown tool '" + toolName + "' — no built-in or dynamic implementation found. " +
+                    "Simulate fallback has been removed to prevent false success.");
         }
     }
 
@@ -816,18 +818,7 @@ public class AgentExecutionEngine {
     }
 
     /**
-     * 模拟工具执行（用于测试和未实现的工具）
-     */
-    private Object simulateTool(String toolName, Map<String, Object> arguments) {
-        return Map.of(
-                "simulated", true,
-                "tool", toolName,
-                "message", "Tool simulated successfully",
-                "arguments", arguments
-        );
-    }
 
-    /**
      * 更新 Agent 状态（SQLite 写串行化）
      */
     private void updateAgentStatus(Agent agent, Agent.AgentStatus status) {

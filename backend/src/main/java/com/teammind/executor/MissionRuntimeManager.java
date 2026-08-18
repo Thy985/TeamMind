@@ -8,7 +8,7 @@ import com.teammind.llm.LLMTrackingService;
 import com.teammind.repository.AgentRepository;
 import com.teammind.repository.MissionRepository;
 import com.teammind.service.AgentMetricsService;
-import com.teammind.websocket.WSEventPublisher;
+import com.teammind.common.EventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
@@ -31,7 +31,7 @@ public class MissionRuntimeManager {
     private final AgentRepository agentRepository;
     private final AgentExecutionEngine executionEngine;
     private final LLMTrackingService trackingService;
-    private final WSEventPublisher eventPublisher;
+    private final EventPublisher eventPublisher;
     private final ExecutorService executorService;
     private final SQLiteWriteLockService writeLockService;
     private final AgentMetricsService agentMetricsService;
@@ -47,7 +47,7 @@ public class MissionRuntimeManager {
             AgentRepository agentRepository,
             AgentExecutionEngine executionEngine,
             LLMTrackingService trackingService,
-            WSEventPublisher eventPublisher,
+            EventPublisher eventPublisher,
             @Qualifier("missionExecutorService") ExecutorService executorService,
             SQLiteWriteLockService writeLockService,
             AgentMetricsService agentMetricsService) {

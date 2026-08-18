@@ -116,6 +116,19 @@ public class PluginRegistry {
             Map<String, Object> map = yaml.load(is);
             if (map == null) return;
             CLIConfig config = CLIConfig.fromMap(map);
+
+            // Skip if a built-in plugin with the same ID already has rich capabilities.
+            // Built-in plugins (ClaudeCodePlugin, CodexPlugin) have real metadata;
+            // GenericCLIPlugin from YAML has empty capabilities and would lose that info.
+            if (pluginManager.findById(config.cliId()).isPresent()) {
+                Plugin existing = pluginManager.findById(config.cliId()).get();
+                if (!existing.metadata().capabilities().isEmpty()) {
+                    log.info("Skipping YAML adapter {} — built-in plugin already registered with capabilities: {}",
+                            config.cliId(), existing.metadata().capabilities());
+                    return;
+                }
+            }
+
             GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus);
             pluginManager.register(plugin);
             log.info("Registered YAML adapter: {} (command={}, format={})",

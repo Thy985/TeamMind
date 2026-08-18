@@ -3,12 +3,15 @@ package com.teammind.controller;
 import com.teammind.common.ReadinessResult;
 import com.teammind.common.ReadinessState;
 import com.teammind.common.TaskActivity;
+import com.teammind.common.TaskExecutionState;
 import com.teammind.entity.*;
 import com.teammind.repository.*;
 import com.teammind.runtime.ActivityExtractor;
 import com.teammind.runtime.EventStoreService;
+import com.teammind.runtime.HumanControlService;
+import com.teammind.runtime.PipelineOrchestrator;
 import com.teammind.runtime.ReadinessManager;
-import com.teammind.websocket.WSEventPublisher;
+import com.teammind.common.EventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -44,8 +47,10 @@ public class TaskDetailController {
     private final ApprovalRequestRepository approvalRepo;
     private final EventStoreService eventStore;
     private final ReadinessManager readinessManager;
-    private final WSEventPublisher wsPublisher;
+    private final EventPublisher wsPublisher;
     private final ActivityExtractor activityExtractor;
+    private final HumanControlService humanControlService;
+    private final PipelineOrchestrator pipelineOrchestrator;
 
     public TaskDetailController(TaskRepository taskRepo,
                                 TaskExecutionRepository executionRepo,
@@ -56,8 +61,10 @@ public class TaskDetailController {
                                 ApprovalRequestRepository approvalRepo,
                                 EventStoreService eventStore,
                                 ReadinessManager readinessManager,
-                                WSEventPublisher wsPublisher,
-                                ActivityExtractor activityExtractor) {
+                                EventPublisher wsPublisher,
+                                ActivityExtractor activityExtractor,
+                                HumanControlService humanControlService,
+                                PipelineOrchestrator pipelineOrchestrator) {
         this.taskRepo = taskRepo;
         this.executionRepo = executionRepo;
         this.stepRepo = stepRepo;
@@ -69,6 +76,8 @@ public class TaskDetailController {
         this.readinessManager = readinessManager;
         this.wsPublisher = wsPublisher;
         this.activityExtractor = activityExtractor;
+        this.humanControlService = humanControlService;
+        this.pipelineOrchestrator = pipelineOrchestrator;
     }
 
     // ─── GET /api/tasks/{id} — Full state snapshot ────────────
@@ -135,27 +144,66 @@ public class TaskDetailController {
         return events.stream().map(this::eventToMap).collect(Collectors.toList());
     }
 
-    // ─── Control endpoints ────────────────────────────────────
+    // ─── Control endpoints (real HumanControlService + PipelineOrchestrator) ───
 
     @PostMapping("/{taskId}/pause")
     public Map<String, Object> pause(@PathVariable String taskId) {
         log.info("Pause requested for task {}", taskId);
-        wsPublisher.publishLog(taskId, "control", "system", "Pause requested");
-        return Map.of("taskId", taskId, "action", "pause", "status", "requested");
+        String executionId = findLatestExecutionId(taskId);
+        if (executionId == null) {
+            return Map.of("taskId", taskId, "action", "pause", "status", "error",
+                    "error", "No execution found for task");
+        }
+        try {
+            pipelineOrchestrator.pausePipeline(executionId);
+            wsPublisher.publishLog(taskId, "control", "system", "Pause applied to execution " + executionId);
+            return Map.of("taskId", taskId, "executionId", executionId,
+                    "action", "pause", "status", "applied");
+        } catch (Exception e) {
+            log.error("Pause failed for task {}: {}", taskId, e.getMessage());
+            return Map.of("taskId", taskId, "action", "pause", "status", "failed",
+                    "error", e.getMessage());
+        }
     }
 
     @PostMapping("/{taskId}/resume")
     public Map<String, Object> resume(@PathVariable String taskId) {
         log.info("Resume requested for task {}", taskId);
-        wsPublisher.publishLog(taskId, "control", "system", "Resume requested");
-        return Map.of("taskId", taskId, "action", "resume", "status", "requested");
+        String executionId = findLatestExecutionId(taskId);
+        if (executionId == null) {
+            return Map.of("taskId", taskId, "action", "resume", "status", "error",
+                    "error", "No execution found for task");
+        }
+        try {
+            pipelineOrchestrator.resumePipeline(executionId);
+            wsPublisher.publishLog(taskId, "control", "system", "Resume applied to execution " + executionId);
+            return Map.of("taskId", taskId, "executionId", executionId,
+                    "action", "resume", "status", "applied");
+        } catch (Exception e) {
+            log.error("Resume failed for task {}: {}", taskId, e.getMessage());
+            return Map.of("taskId", taskId, "action", "resume", "status", "failed",
+                    "error", e.getMessage());
+        }
     }
 
     @PostMapping("/{taskId}/cancel")
     public Map<String, Object> cancel(@PathVariable String taskId) {
         log.info("Cancel requested for task {}", taskId);
-        wsPublisher.publishLog(taskId, "control", "system", "Cancel requested");
-        return Map.of("taskId", taskId, "action", "cancel", "status", "requested");
+        String executionId = findLatestExecutionId(taskId);
+        if (executionId == null) {
+            return Map.of("taskId", taskId, "action", "cancel", "status", "error",
+                    "error", "No execution found for task");
+        }
+        try {
+            pipelineOrchestrator.cancelPipeline(executionId);
+            wsPublisher.publishLog(taskId, "control", "system", "Cancel applied to execution " + executionId);
+            return Map.of("taskId", taskId, "executionId", executionId,
+                    "action", "cancel", "status", "applied");
+        } catch (Exception e) {
+            log.error("Cancel failed for task {}: {}", taskId, e.getMessage());
+            return Map.of("taskId", taskId, "action", "cancel", "status", "failed",
+                    "error", e.getMessage());
+        }
     }
 
     @PostMapping("/{taskId}/approve")
@@ -163,15 +211,48 @@ public class TaskDetailController {
                                        @RequestBody Map<String, Object> body) {
         String decision = body.getOrDefault("decision", "approved").toString();
         log.info("Approval decision for task {}: {}", taskId, decision);
-        wsPublisher.publishLog(taskId, "approval", "system", "Approval: " + decision);
-        return Map.of("taskId", taskId, "action", "approve", "decision", decision);
+        String executionId = findLatestExecutionId(taskId);
+        if (executionId == null) {
+            return Map.of("taskId", taskId, "action", "approve", "status", "error",
+                    "error", "No execution found for task");
+        }
+        try {
+            if ("approved".equalsIgnoreCase(decision)) {
+                humanControlService.approve(executionId);
+            } else {
+                humanControlService.deny(executionId);
+            }
+            wsPublisher.publishLog(taskId, "approval", "system", "Approval " + decision + " applied to " + executionId);
+            return Map.of("taskId", taskId, "executionId", executionId,
+                    "action", "approve", "decision", decision, "status", "applied");
+        } catch (Exception e) {
+            log.error("Approve failed for task {}: {}", taskId, e.getMessage());
+            return Map.of("taskId", taskId, "action", "approve", "status", "failed",
+                    "error", e.getMessage());
+        }
     }
 
     @PostMapping("/{taskId}/retry")
     public Map<String, Object> retry(@PathVariable String taskId) {
         log.info("Retry requested for task {}", taskId);
-        wsPublisher.publishLog(taskId, "control", "system", "Retry requested");
-        return Map.of("taskId", taskId, "action", "retry", "status", "requested");
+        String executionId = findLatestExecutionId(taskId);
+        if (executionId == null) {
+            return Map.of("taskId", taskId, "action", "retry", "status", "error",
+                    "error", "No execution found for task");
+        }
+        try {
+            var newExec = pipelineOrchestrator.retryExecution(executionId);
+            wsPublisher.publishLog(taskId, "control", "system",
+                    "Retry: new execution " + newExec.getId() + " (attempt " + newExec.getAttemptNumber() + ")");
+            return Map.of("taskId", taskId, "oldExecutionId", executionId,
+                    "newExecutionId", newExec.getId(),
+                    "attemptNumber", newExec.getAttemptNumber(),
+                    "action", "retry", "status", "applied");
+        } catch (Exception e) {
+            log.error("Retry failed for task {}: {}", taskId, e.getMessage());
+            return Map.of("taskId", taskId, "action", "retry", "status", "failed",
+                    "error", e.getMessage());
+        }
     }
 
     // ─── GET /api/tasks/{id}/activity — Execution Ledger summary ───
@@ -225,6 +306,18 @@ public class TaskDetailController {
     }
 
     // ─── Helpers ──────────────────────────────────────────────
+
+    /**
+     * 从 taskId 找到最新的 TaskExecution ID（用于控制端点）
+     */
+    private String findLatestExecutionId(String taskId) {
+        return executionRepo.findAll().stream()
+                .filter(e -> taskId.equals(e.getTaskId()))
+                .max(Comparator.comparing(e ->
+                        e.getCreatedAt() != null ? e.getCreatedAt() : java.time.LocalDateTime.MIN))
+                .map(TaskExecution::getId)
+                .orElse(null);
+    }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> buildExecutionSnapshot(String taskId, TaskExecution exec) {

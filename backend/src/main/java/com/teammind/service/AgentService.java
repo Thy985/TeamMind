@@ -10,7 +10,7 @@ import com.teammind.entity.EvolutionRecord.EvolutionType;
 import com.teammind.evolution.EvolutionEngine;
 import com.teammind.repository.AgentRepository;
 import com.teammind.repository.EvolutionRecordRepository;
-import com.teammind.websocket.WSEventPublisher;
+import com.teammind.common.EventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,7 +38,7 @@ public class AgentService {
     private final AgentRepository agentRepository;
     private final EvolutionRecordRepository evolutionRecordRepository;
     private final EvolutionEngine evolutionEngine;
-    private final WSEventPublisher eventPublisher;
+    private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final SQLiteWriteLockService writeLockService;
     private final AgentMetricsService agentMetricsService;

@@ -3,6 +3,7 @@ package com.teammind.runtime;
 import com.teammind.capability.CapabilityRouter;
 import com.teammind.common.ControlMode;
 import com.teammind.plugin.Plugin;
+import com.teammind.runtime.ProjectPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ class CapabilityRouterTest {
 
     @BeforeEach
     void setUp() {
-        router = new CapabilityRouter(new PolicyEngine(), null);
+        router = new CapabilityRouter(new PolicyEngine(), null, null, null);
         policy = ProjectPolicy.builder().build();
     }
 

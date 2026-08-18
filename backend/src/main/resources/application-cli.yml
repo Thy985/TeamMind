@@ -1,0 +1,13 @@
+# CLI Host Profile — 不启动 HTTP/WebSocket/Security
+# 用法: --spring.profiles.active=cli
+
+server:
+  port: 0
+
+teammind:
+  security:
+    enabled: false
+
+spring:
+  main:
+    web-application-type: none

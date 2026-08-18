@@ -8,7 +8,7 @@ import com.teammind.entity.Mission;
 import com.teammind.entity.Mission.MissionStatus;
 import com.teammind.executor.MissionRuntimeManager;
 import com.teammind.repository.MissionRepository;
-import com.teammind.websocket.WSEventPublisher;
+import com.teammind.common.EventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,7 +33,7 @@ public class MissionService {
 
     private final MissionRepository missionRepository;
     private final ObjectMapper objectMapper;
-    private final WSEventPublisher eventPublisher;
+    private final EventPublisher eventPublisher;
     private final MissionRuntimeManager runtimeManager;
     private final SQLiteWriteLockService writeLockService;
 

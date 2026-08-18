@@ -27,7 +27,7 @@ class CapabilityRouterReadinessTest {
         readinessManager = mock(ReadinessManager.class);
         policyEngine = mock(PolicyEngine.class);
         lenient().when(policyEngine.isAllowed(any(), any(), any(), any())).thenReturn(true);
-        router = new CapabilityRouter(policyEngine, readinessManager);
+        router = new CapabilityRouter(policyEngine, readinessManager, null, null);
     }
 
     @Nested

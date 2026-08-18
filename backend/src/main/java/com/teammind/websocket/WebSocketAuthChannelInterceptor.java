@@ -9,7 +9,6 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
@@ -17,11 +16,9 @@ import java.util.Map;
 /**
  * WebSocket 鉴权拦截器
  *
- * 在 STOMP CONNECT 握手阶段校验 Authorization Bearer token，
- * 未携带或 token 非法/过期时拒绝连接，防止匿名客户端窃听全局事件流。
+ * 通过 SecurityConfig 条件注册，不使用 @Component。
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
 

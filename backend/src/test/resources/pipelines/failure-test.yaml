@@ -1,0 +1,13 @@
+name: failure-test
+description: "Pipeline with non-existent agent for failure scenario testing"
+
+steps:
+  - name: implement
+    role: LEAD
+    agent: non-existent-agent
+    prompt: "{{objective}}"
+    timeout: 300000
+
+retry:
+  max_attempts: 1
+  backoff_ms: 1000

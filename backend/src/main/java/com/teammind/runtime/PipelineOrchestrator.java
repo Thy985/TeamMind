@@ -5,10 +5,10 @@ import com.teammind.entity.*;
 import com.teammind.plugin.Plugin;
 import com.teammind.plugin.PluginManager;
 import com.teammind.repository.*;
-import com.teammind.websocket.WSEventPublisher;
+import com.teammind.common.EventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ClassPathResource;
+
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -48,7 +48,7 @@ public class PipelineOrchestrator {
     private final EvidenceLifecycleService evidenceService;
     private final PluginManager pluginManager;
     private final ReadinessManager readinessManager;
-    private final WSEventPublisher wsPublisher;
+    private final EventPublisher wsPublisher;
 
     // ─── Phase 1B compatibility ──────────────────────────────
 
@@ -231,8 +231,11 @@ public class PipelineOrchestrator {
      */
     public PipelineDefinition loadPipeline(String resourceName) {
         try {
-            ClassPathResource resource = new ClassPathResource("pipelines/" + resourceName);
-            try (InputStream is = resource.getInputStream()) {
+            String path = "pipelines/" + resourceName;
+            try (InputStream is = getClass().getClassLoader().getResourceAsStream(path)) {
+                if (is == null) {
+                    throw new RuntimeException("Pipeline not found in classpath: " + path);
+                }
                 Yaml yaml = new Yaml();
                 Map<String, Object> map = yaml.load(is);
                 return parsePipelineDefinition(map);

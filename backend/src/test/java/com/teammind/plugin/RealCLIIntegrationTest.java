@@ -12,7 +12,10 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 真实 CLI 集成测试 — 验证 Claude Code 在 Java ProcessBuilder 中调用成功
+ * 真实 CLI 集成测试 — 验证 Claude Code / Codex 在 Java ProcessBuilder 中调用成功
+ *
+ * 原则：CLI 不在 PATH → assumeTrue 跳过（标记 SKIPPED 而非静默 PASS）
+ *       CLI 在 PATH → 必须真实调用并断言成功
  */
 @SpringBootTest(classes = com.teammind.TeamMindApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -28,24 +31,15 @@ class RealCLIIntegrationTest {
     void realClaudeInvocation() throws Exception {
         System.out.println("\n=== Real Claude Code CLI Integration Test ===");
 
-        // 获取插件
         var claudeOpt = pluginManager.findById("claude-code");
-        if (claudeOpt.isEmpty()) {
-            System.out.println("[E2E] Claude Code plugin not found, skipping");
-            return;
-        }
+        Assumptions.assumeTrue(claudeOpt.isPresent(), "Claude Code plugin not registered");
 
         Plugin claudePlugin = claudeOpt.get();
 
-        // 检查就绪状态
         com.teammind.common.ReadinessResult readiness = readinessManager.check("claude-code");
-        
-        if (readiness.isUnavailable()) {
-            System.out.println("[E2E] Claude Code unavailable: " + readiness.diagnosis());
-            return;
-        }
+        Assumptions.assumeTrue(!readiness.isUnavailable(),
+                "Claude Code unavailable: " + readiness.diagnosis());
 
-        // 调用插件
         Plugin.PluginContext ctx = new Plugin.PluginContext(
                 "e2e-project", "e2e-task-001",
                 Map.of("prompt", "Reply with exactly: TEAMMIND_E2E_OK claude"),
@@ -61,11 +55,8 @@ class RealCLIIntegrationTest {
         System.out.println("[E2E] Claude Code invocation result:");
         System.out.println("  - success: " + result.success());
         System.out.println("  - elapsed: " + elapsedMs + "ms");
-        System.out.println("  - pluginId: " + result.pluginId());
-        System.out.println("  - data type: " + (result.data() != null ? result.data().getClass().getSimpleName() : "null"));
         System.out.println("  - error: " + result.error());
 
-        // 验证结果
         assertTrue(result.success(), "Claude Code invocation should succeed");
         assertNotNull(result.data(), "Data should not be null");
         assertTrue(elapsedMs > 0, "Should take some time");
@@ -75,28 +66,19 @@ class RealCLIIntegrationTest {
     }
 
     @Test
-    @DisplayName("[E2E] Codex CLI 调用验证 — 记录结果（可能有 stdin 限制）")
+    @DisplayName("[E2E] Codex CLI 调用验证 — 真实调用并断言")
     void codexInvocationResult() throws Exception {
         System.out.println("\n=== Real Codex CLI Invocation Test ===");
 
-        // 获取插件
         var codexOpt = pluginManager.findById("codex");
-        if (codexOpt.isEmpty()) {
-            System.out.println("[E2E] Codex plugin not found, skipping");
-            return;
-        }
+        Assumptions.assumeTrue(codexOpt.isPresent(), "Codex plugin not registered");
 
         Plugin codexPlugin = codexOpt.get();
 
-        // 检查就绪状态
         com.teammind.common.ReadinessResult readiness = readinessManager.check("codex");
-        
-        if (readiness.isUnavailable()) {
-            System.out.println("[E2E] Codex unavailable: " + readiness.diagnosis());
-            return;
-        }
+        Assumptions.assumeTrue(!readiness.isUnavailable(),
+                "Codex unavailable: " + readiness.diagnosis());
 
-        // 调用插件
         Plugin.PluginContext ctx = new Plugin.PluginContext(
                 "e2e-project", "e2e-task-002",
                 Map.of("prompt", "Reply with exactly: TEAMMIND_E2E_OK codex"),
@@ -112,15 +94,10 @@ class RealCLIIntegrationTest {
         System.out.println("[E2E] Codex invocation result:");
         System.out.println("  - success: " + result.success());
         System.out.println("  - elapsed: " + elapsedMs + "ms");
-        System.out.println("  - pluginId: " + result.pluginId());
         System.out.println("  - error: " + result.error());
 
-        // 记录结果，不强制断言成功（Codex 可能有 stdin 限制）
-        if (result.success()) {
-            System.out.println("✅ Codex CLI works in Java ProcessBuilder");
-        } else {
-            System.out.println("⚠️  Codex CLI failed (expected in non-interactive env): " + result.error());
-        }
+        assertTrue(result.success(), "Codex CLI invocation should succeed");
+        assertNotNull(result.data(), "Data should not be null");
 
         System.out.println("=== Test completed ===\n");
     }

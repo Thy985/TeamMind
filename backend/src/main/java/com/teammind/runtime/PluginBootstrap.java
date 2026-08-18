@@ -8,6 +8,7 @@ import com.teammind.repository.PluginRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -18,8 +19,9 @@ import java.util.Map;
  * Plugin 启动加载器 — 从数据库读取 Plugin 配置并注册到 PluginManager
  */
 @Slf4j
+@Order(1)
 @Component
-public class PluginBootstrap implements ApplicationRunner {
+public class PluginBootstrap implements ApplicationRunner, RuntimeLifecycle {
 
     private final PluginRepository pluginRepository;
     private final PluginManager pluginManager;
@@ -41,6 +43,11 @@ public class PluginBootstrap implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        // initialize() 由 RuntimeBootstrap @PostConstruct 调用，此处不再重复
+    }
+
+    @Override
+    public void initialize() throws Exception {
         if (!useDatabase || pluginManager.getAll().isEmpty()) {
             // 如果没有 DB 数据或配置为不使用 DB，使用内置注册表
             pluginRegistry.registerAll();

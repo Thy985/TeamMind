@@ -284,9 +284,9 @@ class AgentExecutionEngineTest {
     }
 
     @Test
-    @DisplayName("动态工具：未注册的工具回退为模拟执行，不抛异常")
-    void dynamicTool_unregisteredTool_fallsBackToSimulation() throws Exception {
-        // 未在 Agent.tools 中注册的动态工具，应回退为模拟而非报错
+    @DisplayName("动态工具：未注册的工具明确失败，不再模拟")
+    void dynamicTool_unregisteredTool_failsExplicitly() throws Exception {
+        // 未在 Agent.tools 中注册的动态工具，应明确失败而非模拟成功
         when(llmService.chat(any(LLMRequest.class)))
                 .thenReturn(successResponse(
                         "```json\n{\"tool\": \"unknown_tool\", \"arguments\": {}}\n```",
@@ -296,15 +296,11 @@ class AgentExecutionEngineTest {
         AgentExecutionResult result = executeSync(buildContext());
 
         assertNotNull(result);
-        assertTrue(result.isSuccess());
         assertFalse(result.getToolCalls().isEmpty());
         AgentExecutionContext.ToolCall toolCall = result.getToolCalls().get(0);
         assertEquals("unknown_tool", toolCall.getToolName());
-        assertTrue(toolCall.isSuccess());
-        // 模拟结果标记 simulated=true
-        Object toolResult = toolCall.getResult();
-        assertNotNull(toolResult);
-        assertEquals(true, ((java.util.Map<?, ?>) toolResult).get("simulated"));
+        assertFalse(toolCall.isSuccess());
+        assertNotNull(toolCall.getError());
     }
 
     // ==================== LLM 重试机制 ====================

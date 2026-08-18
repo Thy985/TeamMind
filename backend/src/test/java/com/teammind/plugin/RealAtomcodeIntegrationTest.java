@@ -30,20 +30,13 @@ class RealAtomcodeIntegrationTest {
 
         // 获取插件
         var atomcodeOpt = pluginManager.findById("atomcode");
-        if (atomcodeOpt.isEmpty()) {
-            System.out.println("[E2E] Atomcode plugin not found, skipping");
-            return;
-        }
+        Assumptions.assumeTrue(atomcodeOpt.isPresent(), "Atomcode plugin not registered");
 
         Plugin atomcodePlugin = atomcodeOpt.get();
 
-        // 检查就绪状态
         com.teammind.common.ReadinessResult readiness = readinessManager.check("atomcode");
-        
-        if (readiness.isUnavailable()) {
-            System.out.println("[E2E] Atomcode unavailable: " + readiness.diagnosis());
-            return;
-        }
+        Assumptions.assumeTrue(!readiness.isUnavailable(),
+                "Atomcode unavailable: " + readiness.diagnosis());
 
         // 调用插件
         Plugin.PluginContext ctx = new Plugin.PluginContext(

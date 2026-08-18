@@ -1,5 +1,6 @@
 package com.teammind.websocket;
 
+import com.teammind.common.EventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -9,14 +10,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * WebSocket 事件发布器
- * 
- * 用于向客户端推送实时事件
+ * WebSocket 事件发布器 — Spring WebSocket STOMP 实现
+ *
+ * 实现 {@link EventPublisher} 接口，将 Runtime 事件通过 STOMP 推送到前端。
+ * Runtime Core 只依赖 EventPublisher 接口，不依赖此类。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class WSEventPublisher {
+public class WSEventPublisher implements EventPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
 

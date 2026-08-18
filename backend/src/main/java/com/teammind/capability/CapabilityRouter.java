@@ -3,7 +3,11 @@ package com.teammind.capability;
 import com.teammind.common.AgentRole;
 import com.teammind.common.ControlMode;
 import com.teammind.common.ReadinessResult;
+import com.teammind.entity.PerformanceRecord;
+import com.teammind.entity.RoutingLesson;
 import com.teammind.plugin.Plugin;
+import com.teammind.repository.PerformanceRecordRepository;
+import com.teammind.repository.RoutingLessonRepository;
 import com.teammind.runtime.PolicyEngine;
 import com.teammind.runtime.ProjectPolicy;
 import com.teammind.runtime.ReadinessManager;
@@ -39,10 +43,16 @@ public class CapabilityRouter {
 
     private final PolicyEngine policyEngine;
     private final ReadinessManager readinessManager;
+    private final PerformanceRecordRepository performanceRepo;
+    private final RoutingLessonRepository routingLessonRepo;
 
-    public CapabilityRouter(PolicyEngine policyEngine, ReadinessManager readinessManager) {
+    public CapabilityRouter(PolicyEngine policyEngine, ReadinessManager readinessManager,
+                            PerformanceRecordRepository performanceRepo,
+                            RoutingLessonRepository routingLessonRepo) {
         this.policyEngine = policyEngine;
         this.readinessManager = readinessManager;
+        this.performanceRepo = performanceRepo;
+        this.routingLessonRepo = routingLessonRepo;
     }
 
     /**
@@ -126,7 +136,7 @@ public class CapabilityRouter {
         // 3. 计算 8 因素评分
         Map<String, Double> scores = new LinkedHashMap<>();
         for (Plugin plugin : filtered) {
-            double score = calculateScore(plugin, capability, taskDescription, projectPolicy);
+            double score = calculateScore(plugin, capability, taskDescription, projectPolicy, projectId);
             scores.put(plugin.id(), score);
             log.debug("Routing score: plugin={} capability={} score={}", plugin.id(), capability, score);
         }
@@ -176,7 +186,8 @@ public class CapabilityRouter {
      * 8 因素评分
      */
     private double calculateScore(Plugin plugin, String capability,
-                                    String taskDescription, ProjectPolicy projectPolicy) {
+                                    String taskDescription, ProjectPolicy projectPolicy,
+                                    String projectId) {
         double total = 0.0;
 
         // 因素 1：项目级历史表现（30%）
@@ -184,7 +195,7 @@ public class CapabilityRouter {
 
         // 因素 2：任务类型级表现（20%）
         String taskType = inferTaskType(taskDescription);
-        total += taskTypeScore(plugin, taskType) * WEIGHT_TASK_TYPE * 100;
+        total += taskTypeScore(plugin, taskType, projectId) * WEIGHT_TASK_TYPE * 100;
 
         // 因素 3：哲学匹配（15%）
         total += philosophyScore(plugin, taskDescription) * WEIGHT_PHILOSOPHY * 100;
@@ -202,7 +213,7 @@ public class CapabilityRouter {
         total -= costLatencyPenalty(plugin.metadata());
 
         // Routing Lesson 加成（最多 +15%）
-        total += routingLessonBonus(plugin, capability, taskDescription) * 100;
+        total += routingLessonBonus(plugin, capability, taskDescription, projectId) * 100;
 
         return Math.max(0, total);
     }
@@ -213,9 +224,20 @@ public class CapabilityRouter {
         return reliability != null ? reliability : 0.5;
     }
 
-    /** 因素 2：任务类型级表现 */
-    private double taskTypeScore(Plugin plugin, String taskType) {
-        return 0.5;
+    /** 因素 2：任务类型级表现 — 从 PerformanceRecord 查询真实历史数据 */
+    private double taskTypeScore(Plugin plugin, String taskType, String projectId) {
+        if (projectId == null || taskType == null) return 0.5;
+        try {
+            Optional<PerformanceRecord> record = performanceRepo
+                    .findByProjectIdAndPluginIdAndTaskTypeId(projectId, plugin.id(), taskType);
+            if (record.isPresent() && record.get().getSuccessRate() != null
+                    && record.get().getSampleSize() != null && record.get().getSampleSize() > 0) {
+                return record.get().getSuccessRate();
+            }
+        } catch (Exception e) {
+            log.debug("taskTypeScore lookup failed for plugin={}, taskType={}: {}", plugin.id(), taskType, e.getMessage());
+        }
+        return 0.5; // 无历史数据时返回中性值
     }
 
     /** 因素 3：哲学匹配 */
@@ -270,9 +292,24 @@ public class CapabilityRouter {
         return Math.min(penalty, MAX_COST_LATENCY_PENALTY);
     }
 
-    /** Routing Lesson 加成 */
-    private double routingLessonBonus(Plugin plugin, String capability, String taskDescription) {
-        return 0.0;
+    /** Routing Lesson 加成 — 从 RoutingLessonRepository 查询已学习的路由经验 */
+    private double routingLessonBonus(Plugin plugin, String capability, String taskDescription, String projectId) {
+        if (projectId == null) return 0.0;
+        try {
+            List<RoutingLesson> lessons = routingLessonRepo.findByProjectIdAndPluginId(projectId, plugin.id());
+            if (lessons.isEmpty()) return 0.0;
+
+            double bonus = 0.0;
+            for (RoutingLesson lesson : lessons) {
+                if (lesson.getCondition() != null && lesson.getCondition().contains(capability)) {
+                    bonus += lesson.getConfidence() != null ? lesson.getConfidence() * 0.1 : 0.05;
+                }
+            }
+            return Math.min(bonus, ROUTING_LESSON_BONUS_MAX);
+        } catch (Exception e) {
+            log.debug("routingLessonBonus lookup failed: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     /**

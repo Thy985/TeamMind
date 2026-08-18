@@ -12,6 +12,7 @@ import com.teammind.repository.*;
 import com.teammind.runtime.ReadinessManager;
 import com.teammind.runtime.RecoveryService;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assumptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -187,29 +188,28 @@ class E2EIntegrationTest {
         Plugin codexPlugin = pluginManager.findById("codex").orElseThrow(
                 () -> new AssertionError("Codex plugin not found"));
 
-        // Check readiness — only skip if tool is truly unavailable (not in PATH)
         ReadinessResult readiness = readinessManager.check("codex");
-        if (readiness.isUnavailable()) {
-            System.out.println("[E2E] Codex tool not in PATH, skipping real invocation: " + readiness.diagnosis());
-        } else {
-            // DEGRADED or READY — must attempt real invocation
-            Plugin.PluginContext ctx = new Plugin.PluginContext(
-                    PROJECT_ID, TASK_ID,
-                    Map.of("prompt", "Reply with exactly: TEAMMIND_E2E_OK codex"),
-                    System.getProperty("user.dir"),
-                    Map.of(),
-                    List.of("implementation")
-            );
+        Assumptions.assumeTrue(!readiness.isUnavailable(),
+                "Codex tool not in PATH: " + readiness.diagnosis());
 
-            long startMs = System.currentTimeMillis();
-            var result = codexPlugin.invoke(ctx);
-            long elapsedMs = System.currentTimeMillis() - startMs;
+        Plugin.PluginContext ctx = new Plugin.PluginContext(
+                PROJECT_ID, TASK_ID,
+                Map.of("prompt", "Reply with exactly: TEAMMIND_E2E_OK codex"),
+                System.getProperty("user.dir"),
+                Map.of(),
+                List.of("implementation")
+        );
 
-            System.out.println("[E2E] Codex invocation result: success=" + result.success()
-                    + ", elapsed=" + elapsedMs + "ms"
-                    + (result.error() != null ? ", error=" + result.error() : ""));
-            // Don't assert success here — CI may not have codex. Just log the result.
-        }
+        long startMs = System.currentTimeMillis();
+        var result = codexPlugin.invoke(ctx);
+        long elapsedMs = System.currentTimeMillis() - startMs;
+
+        System.out.println("[E2E] Codex invocation result: success=" + result.success()
+                + ", elapsed=" + elapsedMs + "ms"
+                + (result.error() != null ? ", error=" + result.error() : ""));
+
+        assertTrue(result.success(), "Codex CLI should succeed when ready");
+        assertNotNull(result.data(), "Result data should not be null");
     }
 
     @Test
@@ -219,28 +219,28 @@ class E2EIntegrationTest {
         Plugin claudePlugin = pluginManager.findById("claude-code").orElseThrow(
                 () -> new AssertionError("Claude Code plugin not found"));
 
-        // Check readiness — only skip if tool is truly unavailable (not in PATH)
         ReadinessResult readiness = readinessManager.check("claude-code");
-        if (readiness.isUnavailable()) {
-            System.out.println("[E2E] Claude Code tool not in PATH, skipping: " + readiness.diagnosis());
-        } else {
-            // DEGRADED or READY — must attempt real invocation
-            Plugin.PluginContext ctx = new Plugin.PluginContext(
-                    PROJECT_ID, TASK_ID,
-                    Map.of("prompt", "Reply with exactly: TEAMMIND_E2E_OK claude"),
-                    System.getProperty("user.dir"),
-                    Map.of(),
-                    List.of("implementation")
-            );
+        Assumptions.assumeTrue(!readiness.isUnavailable(),
+                "Claude Code tool not in PATH: " + readiness.diagnosis());
 
-            long startMs = System.currentTimeMillis();
-            var result = claudePlugin.invoke(ctx);
-            long elapsedMs = System.currentTimeMillis() - startMs;
+        Plugin.PluginContext ctx = new Plugin.PluginContext(
+                PROJECT_ID, TASK_ID,
+                Map.of("prompt", "Reply with exactly: TEAMMIND_E2E_OK claude"),
+                System.getProperty("user.dir"),
+                Map.of(),
+                List.of("implementation")
+        );
 
-            System.out.println("[E2E] Claude Code invocation result: success=" + result.success()
-                    + ", elapsed=" + elapsedMs + "ms"
-                    + (result.error() != null ? ", error=" + result.error() : ""));
-        }
+        long startMs = System.currentTimeMillis();
+        var result = claudePlugin.invoke(ctx);
+        long elapsedMs = System.currentTimeMillis() - startMs;
+
+        System.out.println("[E2E] Claude Code invocation result: success=" + result.success()
+                + ", elapsed=" + elapsedMs + "ms"
+                + (result.error() != null ? ", error=" + result.error() : ""));
+
+        assertTrue(result.success(), "Claude Code CLI should succeed when ready");
+        assertNotNull(result.data(), "Result data should not be null");
     }
 
     // ═══════════════════════════════════════════════════════════
