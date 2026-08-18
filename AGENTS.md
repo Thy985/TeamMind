@@ -50,14 +50,16 @@ user.email = 1850833838@qq.com
 | **M1** | Tauri Host（双模式共存） | ✅ 完成 — `tauri-app/` scaffold + HostAdapter |
 | **M2** | Process Supervisor → Rust | ✅ 完成 — Java 接口 + Rust impl（`w7-codex-runtime`） |
 | **M2.5** | ACP Event Mapper POC | ✅ 完成 — ACPEventMapper + AgentTransport 抽象层 + 25 tests |
-| **M3** | Workspace/Git → Rust | ⏳ |
-| **M4** | Event/Streaming → Rust | ⏳ |
-| **M5** | State/Persistence → Rust | ⏳ |
-| **M6** | Plugin Runtime → Rust | ⏳ |
-| **M7** | Orchestrator → Rust | ⏳ |
+| **M3** | Project Execution Model → Rust | ⏳ |
+| **M4** | Execution Ledger (Task-level accountability) | ⏳ |
+| **M5** | Independent Verification (Reviewer ≠ Verifier ≠ Executor) | ⏳ |
+| **M6** | Role / Performance Profile | ⏳ |
+| **M7** | Project Team Evolution | ⏳ |
 | **M8** | Recovery/Human Control → Rust | ⏳ |
 | **M9** | Kill Switch（Java → legacy） | ⏳ |
 | **M10** | Remove Spring Boot | ⏳ |
+
+> **基础设施兼容性层（非核心差异化）：** ACP / Plugin / Workspace / Sandbox / Memory / Multi-Agent / Approval / Context / Mission Loop — 按需提供 Provider/Adapter，不重复造轮子。参考：[docs/research/qwenpaw-comparison.md](docs/research/qwenpaw-comparison.md)
 
 **核心原则：**
 - 不迁移代码，迁移能力
