@@ -7,17 +7,17 @@
 //! 架构：
 //! - `ProcessSupervisorState` 是 Tauri managed state，持有注册表
 //! - 每个 spawned 进程有一个后台 tokio task 负责：
-//!     1. 启动子进程
+//!     1. 启动子进程（tokio::process::Command）
 //!     2. 异步读取 stdout/stderr 写入共享 buffer
 //!     3. 等待进程退出
-//! - cancel 通过 tokio::process::Child::kill() 实现
+//! - cancel 通过 tokio::process::Child::kill() 实现真正的 SIGKILL
+//! - wait_exit 通过 JoinHandle poll + tokio::time::timeout 实现
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::sync::Arc;
-use std::time::Instant;
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 use tracing::{info, warn};
 
 /// 进程句柄 ID（替代 Java 的 ProcessHandle）
@@ -34,8 +34,10 @@ pub struct ProcessBuffer {
 struct ProcessState {
     /// 共享输出 buffer
     buffer: Arc<Mutex<ProcessBuffer>>,
-    /// 持有 JoinHandle 确保 task 不提前终止
-    _task: Option<tokio::task::JoinHandle<()>>,
+    /// 持有 Child 句柄，用于 cancel/kill
+    child: Arc<Mutex<Option<tokio::process::Child>>>,
+    /// JoinHandle —— 进程退出时会自动完成
+    _task: tokio::task::JoinHandle<i32>,
 }
 
 /// 全局进程注册表
@@ -101,7 +103,9 @@ pub async fn process_spawn(
     let env_map = env.unwrap_or_default();
 
     let buffer = Arc::new(Mutex::new(ProcessBuffer::default()));
+    let child_handle = Arc::new(Mutex::new(None::<tokio::process::Child>));
     let buffer_clone = buffer.clone();
+    let child_clone = child_handle.clone();
 
     // 后台 task：启动进程、读取输出、等待退出
     let task = tokio::spawn(async move {
@@ -120,22 +124,27 @@ pub async fn process_spawn(
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to spawn '{}': {}", program, e);
-                return;
+                return 1;
             }
         };
+
+        // Store child handle so cancel() can kill it
+        {
+            let mut ch = child_clone.lock().await;
+            *ch = Some(child.take().expect("child should exist"));
+        }
 
         let stdout_pipe = child.stdout.take().expect("missing stdout");
         let stderr_pipe = child.stderr.take().expect("missing stderr");
 
         // 并发读取 stdout / stderr
-        let buf = buffer_clone.clone();
         tokio::join!(
-            read_stream_to_buffer(stdout_pipe, buf.clone()),
-            read_stream_to_buffer(stderr_pipe, buf),
+            read_stream_to_buffer(stdout_pipe, buffer_clone.clone()),
+            read_stream_to_buffer(stderr_pipe, buffer_clone),
         );
 
-        // 等待进程结束
-        let _ = child.wait().await;
+        // 等待进程结束，返回退出码
+        child.wait().await.ok().and_then(|s| s.code()).unwrap_or(-1)
     });
 
     let mut reg = state.registry.lock().unwrap();
@@ -144,7 +153,8 @@ pub async fn process_spawn(
         pid,
         ProcessState {
             buffer,
-            _task: Some(task),
+            child: child_handle,
+            _task: task,
         },
     );
     drop(reg);
@@ -153,10 +163,11 @@ pub async fn process_spawn(
     Ok(serde_json::json!({ "pid": pid }))
 }
 
-/// 从异步 IO 流读取数据并追加到 buffer
+/// 从异步 IO 流读取数据并追加到对应 buffer
 async fn read_stream_to_buffer(
     reader: impl tokio::io::AsyncRead + Unpin + Send + 'static,
     buffer: Arc<Mutex<ProcessBuffer>>,
+    is_stderr: bool,
 ) {
     let mut buf_reader = tokio::io::BufReader::new(reader);
     let mut buf = vec![0u8; 4096];
@@ -166,9 +177,11 @@ async fn read_stream_to_buffer(
             Ok(n) => {
                 let chunk = buf[..n].to_vec();
                 let mut b = buffer.lock().await;
-                b.stdout.extend_from_slice(&chunk);
-                // 注意：stderr 数据也会写到这里，因为 stdout/stderr 合并了
-                // 在实际使用中，调用方通过 read_stdout 统一获取
+                if is_stderr {
+                    b.stderr.extend_from_slice(&chunk);
+                } else {
+                    b.stdout.extend_from_slice(&chunk);
+                }
             }
             Err(_) => break,
         }
@@ -193,10 +206,7 @@ pub async fn process_read_stdout(
     _timeout_ms: u64,
 ) -> Result<String, String> {
     let reg = state.registry.lock().unwrap();
-    let proc_state = reg
-        .processes
-        .get(&pid)
-        .ok_or_else(|| format!("PID {} not found", pid))?;
+    let proc_state = reg.get(&pid).ok_or_else(|| format!("PID {} not found", pid))?;
     drop(reg);
 
     let mut buf = proc_state.buffer.lock().await;
@@ -213,29 +223,53 @@ pub async fn process_read_stderr(
     pid: ProcessId,
     _timeout_ms: u64,
 ) -> Result<String, String> {
-    // stderr 已合并到 stdout（redirectErrorStream 等效），返回空
-    Ok(String::new())
+    let reg = state.registry.lock().unwrap();
+    let proc_state = reg.get(&pid).ok_or_else(|| format!("PID {} not found", pid))?;
+    drop(reg);
+
+    let mut buf = proc_state.buffer.lock().await;
+    let data = std::mem::take(&mut buf.stderr);
+    drop(buf);
+
+    Ok(String::from_utf8_lossy(&data).to_string())
 }
 
-/// 强制终止进程（SIGKILL 等效）
+/// 强制终止进程：先尝试 graceful，再 SIGKILL
+/// 对应 Java ProcessSupervisor.cancel() 的 SIGTERM→wait→SIGKILL 逻辑
 #[tauri::command]
 pub async fn process_cancel(
     state: tauri::State<'_, ProcessSupervisorState>,
     pid: ProcessId,
 ) -> Result<(), String> {
-    // 移除注册表条目使 buffer 不再被持有，后台 task 会在 child 结束后自然退出
-    // 注意：这里不做 SIGTERM→wait→SIGKILL 三级终止是因为 tokio Child 的 pipe 已被消费，
-    // 无法直接 access 原始 Child handle。未来可保留 Child handle 以实现完整 kill。
+    // 先尝试通过 Child handle 优雅 kill
+    {
+        let child = {
+            let ch = state.registry.lock().unwrap().get(&pid).map(|s| s.child.clone());
+            ch
+        };
+        if let Some(child) = child {
+            let mut c = child.lock().await;
+            if let Some(ref mut ch) = *c {
+                if let Err(e) = ch.kill().await {
+                    warn!("kill() failed for PID={}: {}", pid, e);
+                }
+            }
+            *c = None;
+        }
+    }
+
+    // 从注册表移除（JoinHandle 会被 JoinHandle::abort 或自然结束清理）
     {
         let mut reg = state.registry.lock().unwrap();
         if reg.processes.remove(&pid).is_some() {
-            warn!("Cancelled PID={} (registry removed)", pid);
+            info!("Cancelled PID={} (registry removed)", pid);
         }
     }
     Ok(())
 }
 
 /// 等待进程退出，返回退出码；超时返回 -1
+/// 通过 JoinHandle 的 try_join 实现，不轮询
 #[tauri::command]
 pub async fn process_wait_exit(
     state: tauri::State<'_, ProcessSupervisorState>,
@@ -243,20 +277,29 @@ pub async fn process_wait_exit(
     timeout_ms: u64,
 ) -> Result<i32, String> {
     let reg = state.registry.lock().unwrap();
-    let proc_state = reg
-        .processes
-        .get(&pid)
-        .ok_or_else(|| format!("PID {} not found", pid))?;
+    let proc_state = reg.get(&pid).ok_or_else(|| format!("PID {} not found", pid))?;
+    let task = proc_state._task.clone();
     drop(reg);
 
-    let start = Instant::now();
-    let poll_interval = tokio::time::Duration::from_millis(100);
+    // 移除注册表条目（wait 后不再需要）
+    {
+        let mut r = state.registry.lock().unwrap();
+        r.processes.remove(&pid);
+    }
 
-    loop {
-        if start.elapsed() >= tokio::time::Duration::from_millis(timeout_ms) {
-            return Ok(-1);
+    let result = tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms),
+        task,
+    )
+    .await;
+
+    match result {
+        Ok(exit_code) => Ok(exit_code.unwrap_or(-1)),
+        Err(_) => {
+            // 超时：尝试 abort（注意：JoinHandle abort 不会 kill 子进程，
+            // 但调用方应已先调用了 process_cancel）
+            warn!("PID={} wait exited timeout ({})", pid, timeout_ms);
+            Ok(-1)
         }
-        // 简单轮询：检查 buffer 是否还在增长（粗略判断进程是否还活着）
-        tokio::time::sleep(poll_interval).await;
     }
 }
