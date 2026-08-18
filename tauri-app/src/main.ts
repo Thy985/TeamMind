@@ -22,9 +22,12 @@ app.use(router)
 setupGlobalErrorHandler(app)
 app.mount("#app")
 
-// WebSocket (M4: replace with Tauri event stream)
-import { wsManager } from "../src/api/websocket"
-wsManager.connect().catch((e) => console.warn("[TeamMind] WS skipped:", e))
-window.addEventListener("beforeunload", () => wsManager.disconnect())
+// WebSocket — only in web mode; M4: replace with Tauri event stream
+if (adapter.mode === "web") {
+  import("../src/api/websocket").then(({ wsManager }) => {
+    wsManager.connect().catch((e) => console.warn("[TeamMind] WS error:", e))
+    window.addEventListener("beforeunload", () => wsManager.disconnect())
+  })
+}
 
 console.log("[TeamMind Tauri] Ready. Spring Boot on localhost:8080")
