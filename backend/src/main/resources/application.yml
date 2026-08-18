@@ -154,6 +154,12 @@ teammind:
       evaluation-interval: 3600000
       min-missions-before-evolution: 10
 
+  # Runtime Provider 配置（Strangler Fig 迁移）
+  runtime:
+    process:
+      # 子进程管理 Provider：java（默认）| rust（M2 完成后切换）
+      provider: java
+
 # CORS 配置
 cors:
   allowed-origins: http://localhost:3000,http://localhost:5173

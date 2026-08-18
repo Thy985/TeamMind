@@ -3,6 +3,7 @@ package com.teammind.plugin.adapter;
 import com.teammind.common.*;
 import com.teammind.event.EventBus;
 import com.teammind.event.TeamMindEvent;
+import com.teammind.runtime.ProcessSupervisor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
@@ -23,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * 设计原则：
  * 1. 不硬编码任何特定 CLI 逻辑 — 全部由 config() 描述
- * 2. 统一进程管理 — 通过 CLIProcessTracker 追踪
+ * 2. 进程管理通过 ProcessSupervisor 接口 — 可被 Java/Rust Provider 替换
  * 3. 统一事件发射 — 所有 CLI 的输出都转换为 TeamMind 事件
  */
 @Slf4j
@@ -31,12 +32,14 @@ public class GenericCLIPlugin implements CLIAdapter {
 
     private final CLIConfig config;
     private final EventBus eventBus;
+    private final ProcessSupervisor processSupervisor;
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
-    private volatile Process currentProcess;
+    private volatile ProcessHandle currentProcess;
 
-    public GenericCLIPlugin(CLIConfig config, EventBus eventBus) {
+    public GenericCLIPlugin(CLIConfig config, EventBus eventBus, ProcessSupervisor processSupervisor) {
         this.config = config;
         this.eventBus = eventBus;
+        this.processSupervisor = processSupervisor;
     }
 
     // ─── Plugin interface ─────────────────────────────────────
@@ -71,23 +74,18 @@ public class GenericCLIPlugin implements CLIAdapter {
         List<String> cmd = buildCommand(prompt, workDir);
         log.info("[{}] Starting process: {}", config.cliId(), cmd);
 
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.directory(Path.of(workDir).toFile());
-        pb.redirectErrorStream(true);
-        pb.redirectInput(ProcessBuilder.Redirect.PIPE); // 提供空 stdin
-
-        // 注入环境变量
-        Map<String, String> env = pb.environment();
+        // 收集环境变量
+        Map<String, String> env = new HashMap<>();
         config.env().forEach((k, v) -> env.put(k, expandEnvVars(v)));
 
-        currentProcess = pb.start();
+        // 通过 ProcessSupervisor 启动（Java 或 Rust Provider）
+        currentProcess = processSupervisor.spawn(String.join(" ", cmd), workDir, env);
         log.info("[{}] Process started, PID={}", config.cliId(), currentProcess.pid());
     }
 
     @Override
     public Optional<ProcessHandle> getProcessHandle() {
         return Optional.ofNullable(currentProcess)
-                .map(Process::toHandle)
                 .filter(ProcessHandle::isAlive);
     }
 
@@ -99,7 +97,7 @@ public class GenericCLIPlugin implements CLIAdapter {
     @Override
     public void kill() {
         if (currentProcess != null && currentProcess.isAlive()) {
-            currentProcess.destroyForcibly();
+            processSupervisor.cancel(currentProcess);
             log.info("[{}] Killed process PID={}", config.cliId(), currentProcess.pid());
         }
         cancelled.set(false);
@@ -122,22 +120,27 @@ public class GenericCLIPlugin implements CLIAdapter {
             startProcess(prompt, workDir);
 
             StringBuilder fullOutput = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(currentProcess.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (cancelled.get()) {
-                        kill();
-                        break;
-                    }
-                    fullOutput.append(line).append('\n');
-                    // 解析并逐行发射事件
-                    parseOutput(line, context.taskId(), null);
+            long timeoutMs = TimeUnit.MINUTES.toMillis(config.timeoutMinutes());
+            long elapsed = 0;
+            long pollInterval = 100;
+
+            while (processSupervisor.isAlive(currentProcess) && elapsed < timeoutMs) {
+                if (cancelled.get()) {
+                    kill();
+                    break;
                 }
+                String chunk = processSupervisor.readStdout(currentProcess, pollInterval);
+                if (!chunk.isBlank()) {
+                    fullOutput.append(chunk);
+                    // 逐行解析并发射事件
+                    for (String line : chunk.split("\n")) {
+                        parseOutput(line, context.taskId(), null);
+                    }
+                }
+                elapsed += pollInterval;
             }
 
-            boolean finished = currentProcess.waitFor(config.timeoutMinutes(), TimeUnit.MINUTES);
-            int exitCode = finished ? currentProcess.exitValue() : -1;
+            int exitCode = processSupervisor.waitExit(currentProcess, 1000);
 
             if (cancelled.get()) {
                 eventBus.emit(TeamMindEvent.of(EventType.TASK_CANCELLED,

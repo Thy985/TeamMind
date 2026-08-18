@@ -15,8 +15,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
-# M4: add tray feature when system tray is implemented
-# windows: ["system-tray"]
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -24,6 +22,12 @@ serde_json = "1"
 
 # HTTP client (proxy to Spring Boot)
 reqwest = { version = "0.12", features = ["json"] }
+
+# Async runtime (ProcessSupervisor)
+tokio = { version = "1", features = ["full"] }
+
+# Shell command parsing (for spawn)
+shell-words = "1"
 
 # Logging
 tracing = "0.1"

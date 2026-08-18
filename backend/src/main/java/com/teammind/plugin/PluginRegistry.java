@@ -12,6 +12,7 @@ import com.teammind.plugin.transport.ACPTransport;
 import com.teammind.plugin.transport.AgentConfig;
 import com.teammind.plugin.verifier.GitVerifier;
 import com.teammind.plugin.verifier.TestRunnerVerifier;
+import com.teammind.runtime.ProcessSupervisor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -36,11 +37,13 @@ public class PluginRegistry {
     private final EventBus eventBus;
     private final PluginManager pluginManager;
     private final AgentTransportFactory transportFactory;
+    private final ProcessSupervisor processSupervisor;
 
-    public PluginRegistry(EventBus eventBus, PluginManager pluginManager) {
+    public PluginRegistry(EventBus eventBus, PluginManager pluginManager, ProcessSupervisor processSupervisor) {
         this.eventBus = eventBus;
         this.pluginManager = pluginManager;
         this.transportFactory = new AgentTransportFactory(eventBus);
+        this.processSupervisor = processSupervisor;
     }
 
     /**
@@ -185,7 +188,7 @@ public class PluginRegistry {
             // Built-in plugins (ClaudeCodePlugin, CodexPlugin) have real metadata;
             // GenericCLIPlugin from YAML has empty capabilities and would lose that info.
             if (pluginManager.findById(config.cliId()).isPresent()) {
-                Plugin existing = pluginManager.findById(config.cliId()).get();
+                com.teammind.plugin.Plugin existing = pluginManager.findById(config.cliId()).get();
                 if (!existing.metadata().capabilities().isEmpty()) {
                     log.info("Skipping YAML adapter {} — built-in plugin already registered with capabilities: {}",
                             config.cliId(), existing.metadata().capabilities());
@@ -193,7 +196,7 @@ public class PluginRegistry {
                 }
             }
 
-            GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus);
+            GenericCLIPlugin plugin = new GenericCLIPlugin(config, eventBus, processSupervisor);
             pluginManager.register(plugin);
             log.info("Registered YAML adapter: {} (command={}, format={})",
                     config.cliId(), config.command(), config.outputFormat());
