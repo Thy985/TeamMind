@@ -46,9 +46,9 @@ user.email = 1850833838@qq.com
 
 | Phase | 目标 | 状态 |
 |-------|------|------|
-| **M0** | 冻结 Runtime Contract | 🔄 进行中 — `docs/contracts/runtime-contract.md` 已创建 |
-| **M1** | Tauri Host（双模式共存） | ⏳ 待启动 |
-| **M2** | Process Supervisor → Rust | ⏳ |
+| **M0** | 冻结 Runtime Contract | ✅ 完成 — `docs/contracts/runtime-contract.md` |
+| **M1** | Tauri Host（双模式共存） | ✅ 完成 — `tauri-app/` scaffold + HostAdapter |
+| **M2** | Process Supervisor → Rust | 🔄 进行中 — Java 接口已提取，Rust stub 在 `w7-codex-runtime` |
 | **M3** | Workspace/Git → Rust | ⏳ |
 | **M4** | Event/Streaming → Rust | ⏳ |
 | **M5** | State/Persistence → Rust | ⏳ |
