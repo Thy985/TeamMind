@@ -37,6 +37,33 @@ user.email = 1850833838@qq.com
 - SnakeYAML (pipeline 定义)
 - Maven (构建), pnpm (前端)
 
+## Strangler Fig Migration（进行中）
+
+> **目标：平滑演化到 Tauri + Vue 3 + Rust Runtime + SQLite，不一次性重写。**
+>
+> 完整路线图：[docs/migration/roadmap.md](docs/migration/roadmap.md)
+> Contract 定义：[docs/contracts/runtime-contract.md](docs/contracts/runtime-contract.md)
+
+| Phase | 目标 | 状态 |
+|-------|------|------|
+| **M0** | 冻结 Runtime Contract | 🔄 进行中 — `docs/contracts/runtime-contract.md` 已创建 |
+| **M1** | Tauri Host（双模式共存） | ⏳ 待启动 |
+| **M2** | Process Supervisor → Rust | ⏳ |
+| **M3** | Workspace/Git → Rust | ⏳ |
+| **M4** | Event/Streaming → Rust | ⏳ |
+| **M5** | State/Persistence → Rust | ⏳ |
+| **M6** | Plugin Runtime → Rust | ⏳ |
+| **M7** | Orchestrator → Rust | ⏳ |
+| **M8** | Recovery/Human Control → Rust | ⏳ |
+| **M9** | Kill Switch（Java → legacy） | ⏳ |
+| **M10** | Remove Spring Boot | ⏳ |
+
+**核心原则：**
+- 不迁移代码，迁移能力
+- 不替换框架，替换 Provider
+- 不重写系统，让旧系统逐渐失去存在的理由
+- Runtime Contract v1 是 Java 和 Rust 的共同契约
+
 ## 存储架构原则
 
 > **Markdown/YAML 是项目记忆和配置；SQLite 是运行时事实。**
