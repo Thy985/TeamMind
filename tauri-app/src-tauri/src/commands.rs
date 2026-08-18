@@ -1,4 +1,4 @@
-﻿//! TeamMind Tauri Commands 鈥?鎵€鏈夋闈㈢鍙敤鐨?API 鍏ュ彛
+//! TeamMind Tauri Commands 鈥?鎵€鏈夋闈㈢鍙敤鐨?API 鍏ュ彛
 //!
 //! M1: HTTP proxy (async 鈫?Result<ApiResponse, String>)
 //! M2: ProcessSupervisor (async 鈫?Result)
@@ -40,13 +40,17 @@ pub struct ProcessBuffer {
     pub stderr: Vec<u8>,
 }
 
-/// Per-process state (buffer + child handle)
+/// Per-process state (buffer + child handle + exit code cache + cancellation flag)
 struct ProcessState {
     buffer: Arc<Mutex<ProcessBuffer>>,
     child: Arc<Mutex<Option<tokio::process::Child>>>,
+    /// Cached exit code after process exits; Some(set), None (not yet known)
+    exit_code: std::sync::Mutex<Option<i32>>,
+    /// True once cancel() has been called — used by wait_exit for final cleanup
+    cancelled: std::sync::Mutex<bool>,
 }
 
-/// Global registry: pid 鈫?process state + JoinHandle
+/// Global registry: pid → process state + JoinHandle (tasks kept until drained)
 struct Registry {
     processes: HashMap<ProcessId, ProcessState>,
     tasks: HashMap<ProcessId, tokio::task::JoinHandle<i32>>,
@@ -381,10 +385,15 @@ async fn process_spawn(
         }
     });
 
-    // Register
+    // Register (process entry kept in registry until drain/close)
     let mut reg = state.registry.lock().unwrap();
     let pid = reg.alloc_id();
-    reg.processes.insert(pid, ProcessState { buffer, child: child_handle });
+    reg.processes.insert(pid, ProcessState {
+        buffer,
+        child: child_handle,
+        exit_code: std::sync::Mutex::new(None),
+        cancelled: std::sync::Mutex::new(false),
+    });
     reg.tasks.insert(pid, task);
     drop(reg);
 
@@ -413,33 +422,102 @@ async fn read_stream_to_buffer(
     }
 }
 
+/// Drain buffer up to `timeout_ms` milliseconds; returns whatever is available.
+async fn drain_buffer(buf: &Arc<Mutex<ProcessBuffer>>, timeout_ms: u64) -> Vec<u8> {
+    if timeout_ms == 0 {
+        let mut b = buf.lock().await;
+        return std::mem::take(&mut b.stdout); // non-blocking drain
+    }
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() { break; }
+        let drain = tokio::time::timeout(remaining, {
+            let buf = buf.clone();
+            async move {
+                let mut b = buf.lock().await;
+                std::mem::take(&mut b.stdout)
+            }
+        }).await;
+        match drain {
+            Ok(data) if !data.is_empty() => return data,
+            Ok(_) => { /* empty or timeout */ break; }
+            Err(_) => break, // timeout expired
+        }
+    }
+    // Final non-blocking read
+    let mut b = buf.lock().await;
+    std::mem::take(&mut b.stdout)
+}
+
 #[tauri::command]
 async fn process_is_alive(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId) -> Result<bool, String> {
     Ok(state.registry.lock().unwrap().processes.contains_key(&pid))
 }
 
 #[tauri::command]
-async fn process_read_stdout(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId, _timeout_ms: u64) -> Result<String, String> {
+async fn process_read_stdout(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId, timeout_ms: u64) -> Result<String, String> {
     let buf = {
         let reg = state.registry.lock().unwrap();
         reg.processes.get(&pid).ok_or_else(|| format!("PID {} not found", pid))?.buffer.clone()
     };
-    let data = { let mut b = buf.lock().await; std::mem::replace(&mut b.stdout, Vec::new()) };
+    let data = drain_buffer(&buf, timeout_ms).await;
     Ok(String::from_utf8_lossy(&data).to_string())
 }
 
 #[tauri::command]
-async fn process_read_stderr(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId, _timeout_ms: u64) -> Result<String, String> {
+async fn process_read_stderr(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId, timeout_ms: u64) -> Result<String, String> {
     let buf = {
         let reg = state.registry.lock().unwrap();
         reg.processes.get(&pid).ok_or_else(|| format!("PID {} not found", pid))?.buffer.clone()
     };
+    // Reuse drain logic for stderr
+    if timeout_ms == 0 {
+        let data = { let mut b = buf.lock().await; std::mem::replace(&mut b.stderr, Vec::new()) };
+        return Ok(String::from_utf8_lossy(&data).to_string());
+    }
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() { break; }
+        let drain = tokio::time::timeout(remaining, {
+            let buf = buf.clone();
+            async move {
+                let mut b = buf.lock().await;
+                std::mem::take(&mut b.stderr)
+            }
+        }).await;
+        match drain {
+            Ok(data) if !data.is_empty() => return Ok(String::from_utf8_lossy(&data).to_string()),
+            Ok(_) => break,
+            Err(_) => break,
+        }
+    }
     let data = { let mut b = buf.lock().await; std::mem::replace(&mut b.stderr, Vec::new()) };
     Ok(String::from_utf8_lossy(&data).to_string())
 }
 
+/// Drain the process entry from the registry after wait_exit has cached the exit code.
+/// Safe to call multiple times (idempotent). Called automatically by wait_exit when
+/// the JoinHandle completes; callers can also invoke this explicitly to release memory.
+#[tauri::command]
+async fn process_drain(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId) -> Result<(), String> {
+    let mut reg = state.registry.lock().unwrap();
+    reg.processes.remove(&pid);
+    reg.tasks.remove(&pid);
+    Ok(())
+}
+
 #[tauri::command]
 async fn process_cancel(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId) -> Result<(), String> {
+    // Signal cancellation BEFORE killing, so wait_exit knows to drain and remove
+    {
+        let reg = state.registry.lock().unwrap();
+        if let Some(ps) = reg.processes.get(&pid) {
+            *ps.cancelled.lock().unwrap() = true;
+        }
+    }
+    // Kill the process
     {
         let child = {
             let reg = state.registry.lock().unwrap();
@@ -453,30 +531,47 @@ async fn process_cancel(state: tauri::State<'_, ProcessSupervisorState>, pid: Pr
             *c = None;
         }
     }
-    { state.registry.lock().unwrap().processes.remove(&pid); }
     info!("Cancelled PID={}", pid);
     Ok(())
 }
 
 #[tauri::command]
 async fn process_wait_exit(state: tauri::State<'_, ProcessSupervisorState>, pid: ProcessId, timeout_ms: u64) -> Result<i32, String> {
-    // Remove from registry and take the JoinHandle
+    // Take the JoinHandle without removing the process entry (idempotent + cancel-safe)
     let task = {
         let mut reg = state.registry.lock().unwrap();
-        reg.processes.remove(&pid);
         reg.tasks.remove(&pid)
     };
-    let Some(task) = task else { return Err(format!("PID {} not found", pid)); };
+    let Some(task) = task else {
+        // Process already completed — return cached exit code if available
+        let ec = {
+            let reg = state.registry.lock().unwrap();
+            reg.processes.get(&pid).and_then(|ps| *ps.exit_code.lock().unwrap())
+        };
+        return Ok(ec.unwrap_or(-1));
+    };
 
     let result = tokio::time::timeout(
         tokio::time::Duration::from_millis(timeout_ms),
         task,
     ).await;
 
-    match result {
-        Ok(code) => Ok(code.unwrap_or(-1)),
-        Err(_) => { warn!("PID={} wait timeout", pid); Ok(-1) }
+    let code = match result {
+        Ok(code) => code.unwrap_or(-1),
+        Err(_) => { warn!("PID={} wait timeout", pid); -1 }
+    };
+
+    // Cache exit code and clean up background reader task references
+    {
+        let mut reg = state.registry.lock().unwrap();
+        if let Some(ps) = reg.processes.get_mut(&pid) {
+            *ps.exit_code.lock().unwrap() = Some(code);
+        }
+        // Remove reader JoinHandle so it can be dropped
+        reg.tasks.remove(&pid);
     }
+    info!("PID={} exited with code={}", pid, code);
+    Ok(code)
 }
 
 // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?// M2.5: ACP Event Stream
