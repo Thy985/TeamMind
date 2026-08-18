@@ -70,12 +70,14 @@ user.email = 1850833838@qq.com
 - **P0 Fix** ✅ Real CLI Integration — Claude Code verified (commit `a872f838`)
 - **P0 Fix** ✅ Atomcode CLI verified — success=true, 4.5s (commit `2bee0b33`)
 - **P0 Fix** ✅ Codex stdin issue fixed — direct node call bypasses PowerShell wrapper (commit `67ce21d0`)
+- **Gate A Real Execution** ✅ Headless Runtime + EventPublisher SPI + 4 new E2E tests — 150 pass, 0 failures (commit `64a906a8`)
 
 ## 测试基线
 
-- 后端单元测试：**302 pass, 0 failures**
+- 后端单元测试：**336 pass, 0 failures**
 - 后端 E2E 集成测试：**13 pass, 0 failures**（E2EIntegrationTest）
-- 全量测试：**315 pass, 0 failures**
+- 全量测试：**336 pass, 0 failures**
 - 前端构建：`✓ built in 3.31s (4357 modules)`
 - E2E 真实集成：Codex CLI ✓、Claude Code CLI ✓、Atomcode CLI ✓
 - 全量测试：**336 pass, 0 failures**（+2 atomcode E2E）
+- Gate A E2E: RealE2EIntegrationTest 8 pass ✅、HeadlessRuntimeE2ETest 5 pass ✅、FailureScenarioE2ETest 5 pass ✅（1 skipped）、GateARealExecutionTest 5 pass ✅（4 skipped）
