@@ -346,6 +346,7 @@ pub fn run() {
         .manage(AcpStreamerState::new())
         .manage(ProviderStateStore::new())
         .manage(PerformanceStore::new())
+        .manage(WorkspaceManagerState::new())
         .invoke_handler(tauri::generate_handler![
             health_check, 
             project_list, project_get, project_create, project_delete,
@@ -359,6 +360,8 @@ pub fn run() {
             process_spawn, process_is_alive, process_read_stdout,
             process_read_stderr, process_cancel, process_wait_exit,
             acp_spawn_stream, acp_read_events, acp_close_stream,
+            workspace_create, workspace_delete, workspace_git_status, workspace_git_diff,
+            workspace_commit, workspace_snapshot, workspace_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1103,6 +1106,253 @@ async fn perf_record(
     let agent_id = record.agent_id.clone();
     state.append(record);
     Ok(serde_json::json!({ "recorded": true, "agent_id": agent_id }))
+}
+
+// ─── M4: Workspace / Git Management ─────────────────────────────────────────
+// Invariant #5: Reviewer 默认不能修改 Executor Workspace | 两个 worktree 隔离
+
+/// 一个 worktree 内的 git 状态快照
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RepoSnapshot {
+    pub branch: String,
+    pub head_sha: String,
+    pub tracked_files: Vec<String>,
+    pub status_porcelain: String,
+    pub diff_stat: String,
+    pub captured_at_ms: u64,
+}
+
+#[derive(Default)]
+pub struct WorkspaceManagerState {
+    /// worktree_path -> (base_repo_path, created_at_ms)
+    pub worktrees: std::sync::Mutex<HashMap<String, (String, u64)>>,
+}
+
+impl WorkspaceManagerState {
+    pub fn new() -> Self { Self::default() }
+
+    /// 为指定任务创建独立 worktree（Executor 专用）
+    /// 确保 Executor 和 Reviewer 在不同 worktree
+    pub async fn create_worktree(&self, base_repo: &str, task_id: &str, branch: &str) -> Result<String, String> {
+        let worktree_path = format!("{}__wt_{}", base_repo.trim_end_matches('/'), task_id);
+        let started_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+
+        // git worktree add
+        let output = tokio::process::Command::new("git")
+            .args(["worktree", "add", "-b", branch, &worktree_path])
+            .current_dir(base_repo)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to create worktree: {}", e))?;
+
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("git worktree add failed: {}", err.trim()));
+        }
+
+        // Also do a shallow clone fallback if worktree add fails on this platform
+        if !std::path::Path::new(&worktree_path).exists() {
+            let branch_ref = if branch.starts_with("refs/") { branch.to_string() } else { format!("refs/heads/{}", branch) };
+            let output2 = tokio::process::Command::new("git")
+                .args(["clone", "--no-local", "--single-branch", "-b", branch, base_repo, &worktree_path])
+                .output()
+                .await
+                .map_err(|e| format!("Failed to clone worktree: {}", e))?;
+            if !output2.status.success() {
+                return Err(format!("git clone failed: {}", String::from_utf8_lossy(&output2.stderr)));
+            }
+        }
+
+        let mut wt = self.worktrees.lock().unwrap();
+        wt.insert(worktree_path.clone(), (base_repo.to_string(), started_at));
+        Ok(worktree_path)
+    }
+
+    /// 删除 worktree
+    pub async fn delete_worktree(&self, worktree_path: &str) -> Result<(), String> {
+        // git worktree remove
+        let output = tokio::process::Command::new("git")
+            .args(["worktree", "remove", "--force", worktree_path])
+            .output()
+            .await
+            .map_err(|e| format!("Failed to remove worktree: {}", e))?;
+
+        if !output.status.success() {
+            // Try rmdir as fallback
+            if let Err(e) = tokio::fs::remove_dir_all(worktree_path).await {
+                return Err(format!("Failed to remove worktree {}: {}", worktree_path, e));
+            }
+        }
+
+        let mut wt = self.worktrees.lock().unwrap();
+        wt.remove(worktree_path);
+        Ok(())
+    }
+
+    /// 获取 worktree 的 git status（porcelain format）
+    pub async fn git_status(&self, worktree_path: &str) -> Result<String, String> {
+        if !self.worktrees.lock().unwrap().contains_key(worktree_path) {
+            return Err(format!("Worktree not managed: {}", worktree_path));
+        }
+        let output = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "status", "--porcelain"])
+            .output()
+            .await
+            .map_err(|e| format!("git status failed: {}", e))?;
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// 获取 worktree 的 git diff（stat format）
+    pub async fn git_diff(&self, worktree_path: &str) -> Result<String, String> {
+        if !self.worktrees.lock().unwrap().contains_key(worktree_path) {
+            return Err(format!("Worktree not managed: {}", worktree_path));
+        }
+        let output = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "diff", "--stat"])
+            .output()
+            .await
+            .map_err(|e| format!("git diff failed: {}", e))?;
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// 提交 worktree 中的所有变更
+    pub async fn git_commit(&self, worktree_path: &str, message: &str) -> Result<String, String> {
+        if !self.worktrees.lock().unwrap().contains_key(worktree_path) {
+            return Err(format!("Worktree not managed: {}", worktree_path));
+        }
+        // git add -A
+        let add_out = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "add", "-A"])
+            .output()
+            .await
+            .map_err(|e| format!("git add failed: {}", e))?;
+        if !add_out.status.success() {
+            return Err("git add failed".to_string());
+        }
+        // git commit
+        let output = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "commit", "-m", message])
+            .output()
+            .await
+            .map_err(|e| format!("git commit failed: {}", e))?;
+        if !output.status.success() {
+            return Err(format!("git commit failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+        // Get commit hash
+        let hash_out = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "rev-parse", "HEAD"])
+            .output()
+            .await
+            .map_err(|e| format!("git rev-parse failed: {}", e))?;
+        Ok(String::from_utf8_lossy(&hash_out.stdout).trim().to_string())
+    }
+
+    /// 捕获 worktree 的完整快照（用于 handoff / evidence）
+    pub async fn snapshot_state(&self, worktree_path: &str) -> Result<RepoSnapshot, String> {
+        if !self.worktrees.lock().unwrap().contains_key(worktree_path) {
+            return Err(format!("Worktree not managed: {}", worktree_path));
+        }
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+
+        // branch
+        let branch_out = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "branch", "--show-current"])
+            .output().await.map_err(|e| e.to_string())?;
+        let branch = String::from_utf8_lossy(&branch_out.stdout).trim().to_string();
+
+        // head sha
+        let sha_out = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "rev-parse", "HEAD"])
+            .output().await.map_err(|e| e.to_string())?;
+        let head_sha = String::from_utf8_lossy(&sha_out.stdout).trim().to_string();
+
+        // tracked files
+        let files_out = tokio::process::Command::new("git")
+            .args(["-C", worktree_path, "ls-files"])
+            .output().await.map_err(|e| e.to_string())?;
+        let tracked_files: Vec<String> = String::from_utf8_lossy(&files_out.stdout)
+            .lines().filter(|l| !l.is_empty()).map(|s| s.to_string()).collect();
+
+        // status
+        let status = self.git_status(worktree_path).await?;
+        // diff stat
+        let diff = self.git_diff(worktree_path).await?;
+
+        Ok(RepoSnapshot { branch, head_sha, tracked_files, status_porcelain: status, diff_stat: diff, captured_at_ms: now })
+    }
+
+    /// 列出所有已创建的 worktree
+    pub fn list_worktrees(&self) -> Vec<String> {
+        self.worktrees.lock().unwrap().keys().cloned().collect()
+    }
+}
+
+// ─── M4: Tauri Commands ──────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn workspace_create(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+    base_repo: String,
+    task_id: String,
+    branch: String,
+) -> Result<serde_json::Value, String> {
+    let path = ws_state.create_worktree(&base_repo, &task_id, &branch).await?;
+    Ok(serde_json::json!({ "worktree_path": path, "task_id": task_id }))
+}
+
+#[tauri::command]
+async fn workspace_delete(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+    worktree_path: String,
+) -> Result<serde_json::Value, String> {
+    ws_state.delete_worktree(&worktree_path).await?;
+    Ok(serde_json::json!({ "deleted": worktree_path }))
+}
+
+#[tauri::command]
+async fn workspace_git_status(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+    worktree_path: String,
+) -> Result<serde_json::Value, String> {
+    let status = ws_state.git_status(&worktree_path).await?;
+    let lines: Vec<String> = status.lines().filter(|l| !l.is_empty()).map(|s| s.to_string()).collect();
+    Ok(serde_json::json!({ "worktree": worktree_path, "status_lines": lines, "raw": status }))
+}
+
+#[tauri::command]
+async fn workspace_git_diff(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+    worktree_path: String,
+) -> Result<serde_json::Value, String> {
+    let diff = ws_state.git_diff(&worktree_path).await?;
+    Ok(serde_json::json!({ "worktree": worktree_path, "diff_stat": diff }))
+}
+
+#[tauri::command]
+async fn workspace_commit(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+    worktree_path: String,
+    message: String,
+) -> Result<serde_json::Value, String> {
+    let sha = ws_state.git_commit(&worktree_path, &message).await?;
+    Ok(serde_json::json!({ "worktree": worktree_path, "commit_sha": sha }))
+}
+
+#[tauri::command]
+async fn workspace_snapshot(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+    worktree_path: String,
+) -> Result<serde_json::Value, String> {
+    let snap = ws_state.snapshot_state(&worktree_path).await?;
+    Ok(serde_json::to_value(&snap).map_err(|e| e.to_string())?)
+}
+
+#[tauri::command]
+async fn workspace_list(
+    ws_state: tauri::State<'_, WorkspaceManagerState>,
+) -> Result<serde_json::Value, String> {
+    let trees = ws_state.list_worktrees();
+    Ok(serde_json::json!({ "worktrees": trees, "count": trees.len() }))
 }
 
 #[tauri::command]
