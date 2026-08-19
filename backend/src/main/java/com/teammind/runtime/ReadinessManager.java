@@ -4,6 +4,8 @@ import com.teammind.common.*;
 import com.teammind.plugin.Plugin;
 import com.teammind.plugin.PluginManager;
 import com.teammind.plugin.adapter.WindowsCommandHelper;
+import com.teammind.plugin.transport.ProviderState;
+import com.teammind.plugin.transport.ProviderStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +14,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,11 +26,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *   2. 执行检查（CLI 版本、HTTP endpoint、认证文件等）
  *   3. 尝试自动恢复
  *   4. 返回 ReadinessResult 供 CapabilityRouter 前置过滤
+ *   5. 管理 Provider 就绪状态（STARTING / READY / DEGRADED / UNAVAILABLE）
  *
  * 设计原则：
  *   - 不硬编码任何 Plugin 特定的逻辑
  *   - 每个 Plugin 通过 dependencies() 声明自己需要什么
  *   - Recovery 策略也是声明式的（在 PluginDependency 里）
+ *   - Provider 内部复杂度对 TeamMind Runtime 透明
  */
 @Slf4j
 @Component
@@ -35,6 +40,7 @@ public class ReadinessManager {
 
     private final PluginManager pluginManager;
     private final Map<String, ReadinessResult> cache = new ConcurrentHashMap<>();
+    private final Map<String, ProviderStatus> providerStatuses = new ConcurrentHashMap<>();
     private LocalDateTime lastScanTime;
 
     public ReadinessManager(PluginManager pluginManager) {
@@ -42,8 +48,26 @@ public class ReadinessManager {
     }
 
     /**
+     * 注册 Provider 状态（由 QwenPawACPTransport.prewarm() 等调用）
+     */
+    public void setProviderStatus(ProviderStatus status) {
+        providerStatuses.put(status.providerId(), status);
+        log.info("Provider status updated: {} -> {}", status.providerId(), status.state());
+    }
+
+    /**
+     * 获取 Provider 当前状态
+     */
+    public ProviderStatus getProviderStatus(String providerId) {
+        return providerStatuses.getOrDefault(providerId, ProviderStatus.discovered(providerId));
+    }
+
+    /**
      * 检查单个 Plugin 的就绪状态。
      * 结果缓存在内存中，避免每次路由都重新探测。
+     *
+     * 如果 Plugin 有对应的 Provider 且状态为 STARTING，返回 STARTING 状态
+     * 而不是 UNAVAILABLE，让 Router 知道"正在预热，请稍后重试"。
      */
     public ReadinessResult check(String pluginId) {
         // 如果缓存有效期 < 30 秒，直接使用缓存
@@ -53,7 +77,41 @@ public class ReadinessManager {
             return cache.get(pluginId);
         }
 
-        Optional<Plugin> opt = pluginManager.findById(pluginId);
+        // Provider State 优先：如果 Plugin 对应 Provider 正在 STARTING，返回 STARTING
+        ProviderStatus providerStatus = getProviderStatus(pluginId);
+        if (providerStatus.isStarting()) {
+            log.debug("Plugin {} is STARTING (provider warmup in progress)", pluginId);
+            var result = ReadinessResult.builder()
+                    .pluginId(pluginId)
+                    .state(ReadinessState.CONFIGURED)
+                    .readinessScore(0.0)
+                    .diagnosis("Provider is warming up: " + (providerStatus.lastError() != null ? providerStatus.lastError() : "workspace_initializing"))
+                    .failedChecks(List.of("provider_starting"))
+                    .details(Map.of("provider_state", "STARTING", "startup_ms", providerStatus.startupMs()))
+                    .build();
+            cache.put(pluginId, result);
+            return result;
+        }
+        if (providerStatus.state() == ProviderState.UNAVAILABLE) {
+            var result = ReadinessResult.unavailable(pluginId,
+                    "Provider unavailable: " + providerStatus.lastError(),
+                    List.of("provider_unavailable"));
+            cache.put(pluginId, result);
+            return result;
+        }
+        if (providerStatus.state() == ProviderState.DEGRADED) {
+            var result = ReadinessResult.builder()
+                    .pluginId(pluginId)
+                    .state(ReadinessState.DEGRADED)
+                    .readinessScore(0.5)
+                    .diagnosis("Provider degraded: " + providerStatus.lastError())
+                    .failedChecks(List.of("provider_degraded"))
+                    .details(Map.of("provider_state", "DEGRADED"))
+                    .build();
+            cache.put(pluginId, result);
+            return result;
+        }
+Optional<Plugin> opt = pluginManager.findById(pluginId);
         if (opt.isEmpty()) {
             return ReadinessResult.unavailable(pluginId, "Plugin not registered", List.of("NOT_REGISTERED"));
         }
