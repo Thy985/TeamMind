@@ -172,23 +172,6 @@ Reviewer worktree: /project/__wt_review-abc123 ← 独立，不可写
 
 ## M6：State/Persistence → Rust
 
-**Java 现有：** `EventBus.java`、`EventStoreService.java`、`EventMapper.java`
-
-**Rust 新增：**
-```rust
-pub trait EventStream {
-    fn emit(&self, event: RuntimeEvent);
-    fn subscribe(&self, task_id: &str, handler: Box<dyn EventSink>);
-    fn replay(&self, task_id: &str, from_ts: Option<u64>) -> Vec<RuntimeEvent>;
-}
-```
-
-**收益：** 去掉 WebSocket 中间层，Rust Runtime 直接 push 到 Tauri frontend。
-
----
-
-## M5：State / Persistence → Rust
-
 **Java 现有：** JPA + SQLite + Flyway（4 个 migration 文件）
 
 **Rust 新增：**
