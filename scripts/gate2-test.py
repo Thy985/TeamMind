@@ -118,7 +118,7 @@ async def main():
     if artifact["exists"]:
         print(f"  Content preview:\n    {artifact['content'][:200]}...", flush=True)
     else:
-        print("  ⚠ No artifact generated (OpenCode ACP doesn't write files)", flush=True)
+        print("  [SKIP] No artifact generated (OpenCode ACP doesn't write files)", flush=True)
 
     # ─── Step 4: Summary ───────────────────────────────────────────
     print("\n" + "=" * 60, flush=True)
