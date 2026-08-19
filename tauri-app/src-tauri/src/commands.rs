@@ -111,6 +111,154 @@ impl AcpEvent {
     }
 }
 
+// ─── M3: Provider State Machine (Gate 2) ─────────────────────────────────────
+// Provider 内部复杂度对 TeamMind Runtime 透明。
+// TeamMind 只看到：READY / STARTING / DEGRADED / UNAVAILABLE
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProviderState {
+    Discovered,
+    Configured,
+    Starting,
+    Ready,
+    Degraded,
+    Unavailable,
+    Stopped,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProviderStatus {
+    pub provider_id: String,
+    pub state: ProviderState,
+    pub started_at_ms: u64,
+    pub last_error: Option<String>,
+    pub capabilities: Vec<String>,
+}
+
+impl ProviderStatus {
+    pub fn discovered(id: &str) -> Self {
+        Self { provider_id: id.to_string(), state: ProviderState::Discovered, started_at_ms: 0, last_error: None, capabilities: vec![] }
+    }
+    pub fn starting(id: &str) -> Self {
+        Self { provider_id: id.to_string(), state: ProviderState::Starting, started_at_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64, last_error: None, capabilities: vec![] }
+    }
+    pub fn ready(id: &str, startup_ms: u64, caps: &[&str]) -> Self {
+        Self { provider_id: id.to_string(), state: ProviderState::Ready, started_at_ms: startup_ms, last_error: None, capabilities: caps.iter().map(|s| s.to_string()).collect() }
+    }
+    pub fn degraded(id: &str, error: &str, caps: &[&str]) -> Self {
+        Self { provider_id: id.to_string(), state: ProviderState::Degraded, started_at_ms: 0, last_error: Some(error.to_string()), capabilities: caps.iter().map(|s| s.to_string()).collect() }
+    }
+    pub fn unavailable(id: &str, error: &str) -> Self {
+        Self { provider_id: id.to_string(), state: ProviderState::Unavailable, started_at_ms: 0, last_error: Some(error.to_string()), capabilities: vec![] }
+    }
+    pub fn is_runnable(&self) -> bool {
+        matches!(self.state, ProviderState::Ready | ProviderState::Degraded)
+    }
+    pub fn is_starting(&self) -> bool {
+        matches!(self.state, ProviderState::Starting)
+    }
+}
+
+#[derive(Default)]
+pub struct ProviderStateStore {
+    pub providers: std::sync::Mutex<HashMap<String, ProviderStatus>>,
+}
+
+impl ProviderStateStore {
+    pub fn new() -> Self { Self::default() }
+    pub fn set(&self, status: ProviderStatus) {
+        let mut store = self.providers.lock().unwrap();
+        store.insert(status.provider_id.clone(), status);
+    }
+    pub fn get(&self, id: &str) -> Option<ProviderStatus> {
+        self.providers.lock().unwrap().get(id).cloned()
+    }
+    pub fn list_runnable(&self) -> Vec<String> {
+        self.providers.lock().unwrap().values()
+            .filter(|p| p.is_runnable())
+            .map(|p| p.provider_id.clone())
+            .collect()
+    }
+}
+
+// ─── M3: Agent Performance Profile (Gate 2) ──────────────────────────────────
+// 只记录可验证事实，不做"谁更强"判断。
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AgentPerformanceRecord {
+    pub project_id: String,
+    pub agent_id: String,
+    pub transport: String,
+    pub role: String,
+    pub task_type: String,
+    pub started_at_ms: u64,
+    pub completed_at_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub result: Option<bool>,
+    pub verification_result: Option<String>,
+    pub artifacts: Vec<String>,
+    pub rework_count: u32,
+    pub review_findings: u32,
+    pub accepted_findings: u32,
+    pub human_accepted: Option<bool>,
+    pub evidence_quality: Option<f64>,
+}
+
+impl AgentPerformanceRecord {
+    pub fn start(project_id: &str, agent_id: &str, transport: &str, role: &str, task_type: &str) -> Self {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        Self { project_id: project_id.to_string(), agent_id: agent_id.to_string(), transport: transport.to_string(), role: role.to_string(), task_type: task_type.to_string(), started_at_ms: now, completed_at_ms: None, duration_ms: None, result: None, verification_result: None, artifacts: vec![], rework_count: 0, review_findings: 0, accepted_findings: 0, human_accepted: None, evidence_quality: None }
+    }
+    pub fn complete(mut self, success: bool, duration_ms: u64, verification: &str, artifacts: &[&str]) -> Self {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        self.completed_at_ms = Some(now);
+        self.duration_ms = Some(duration_ms);
+        self.result = Some(success);
+        self.verification_result = Some(verification.to_string());
+        self.artifacts = artifacts.iter().map(|s| s.to_string()).collect();
+        self
+    }
+}
+
+#[derive(Default)]
+pub struct PerformanceStore {
+    pub records: std::sync::Mutex<Vec<AgentPerformanceRecord>>,
+}
+
+impl PerformanceStore {
+    pub fn new() -> Self { Self::default() }
+    pub fn append(&self, record: AgentPerformanceRecord) {
+        let mut store = self.records.lock().unwrap();
+        store.push(record);
+    }
+    pub fn get_by_agent(&self, project_id: &str, agent_id: &str) -> Vec<AgentPerformanceRecord> {
+        let store = self.records.lock().unwrap();
+        store.iter().filter(|r| r.project_id == project_id && r.agent_id == agent_id).cloned().collect()
+    }
+    pub fn aggregate(&self, project_id: &str, agent_id: &str) -> serde_json::Value {
+        let records = self.get_by_agent(project_id, agent_id);
+        if records.is_empty() {
+            return serde_json::json!({ "agent_id": agent_id, "total_tasks": 0 });
+        }
+        let total = records.len() as f64;
+        let completed = records.iter().filter(|r| r.result == Some(true)).count() as f64;
+        let durations: Vec<u64> = records.iter().filter_map(|r| r.duration_ms).collect();
+        let avg_dur = if durations.is_empty() { 0.0 } else { durations.iter().sum::<u64>() as f64 / durations.len() as f64 };
+        let success_rate = completed / total;
+        let avg_rework: f64 = records.iter().map(|r| r.rework_count as f64).sum::<f64>() / total;
+        let human_accepted = records.iter().filter(|r| r.human_accepted == Some(true)).count() as f64 / total;
+        serde_json::json!({
+            "agent_id": agent_id,
+            "total_tasks": records.len(),
+            "success_rate": (success_rate * 100.0) as i32 / 100,
+            "avg_duration_ms": avg_dur as i64,
+            "avg_rework_count": (avg_rework * 100.0) as i32 / 100,
+            "human_acceptance_rate": (human_accepted * 100.0) as i32 / 100,
+        })
+    }
+}
+
 #[derive(Default)]
 pub struct EventsBuffer {
     events: Vec<AcpEvent>,
@@ -196,6 +344,8 @@ pub fn run() {
         .manage(RuntimeState::new())
         .manage(ProcessSupervisorState::new())
         .manage(AcpStreamerState::new())
+        .manage(ProviderStateStore::new())
+        .manage(PerformanceStore::new())
         .invoke_handler(tauri::generate_handler![
             health_check, 
             project_list, project_get, project_create, project_delete,
@@ -911,6 +1061,67 @@ async fn acp_read_events(state: tauri::State<'_, AcpStreamerState>, stream_id: u
 async fn acp_close_stream(state: tauri::State<'_, AcpStreamerState>, stream_id: u32) -> Result<(), String> {
     if !state.unregister(stream_id) { return Err(format!("Stream {} not found", stream_id)); }
     Ok(())
+}
+
+// ─── M3: Provider State Management Commands ─────────────────────────────────
+
+#[tauri::command]
+async fn provider_set_status(
+    state: tauri::State<'_, ProviderStateStore>,
+    provider_id: String,
+    status: ProviderStatus,
+) -> Result<serde_json::Value, String> {
+    state.set(status.clone());
+    Ok(serde_json::json!({ "provider_id": provider_id, "state": serde_json::to_value(&status.state).unwrap() }))
+}
+
+#[tauri::command]
+async fn provider_get_status(
+    state: tauri::State<'_, ProviderStateStore>,
+    provider_id: String,
+) -> Result<serde_json::Value, String> {
+    match state.get(&provider_id) {
+        Some(s) => Ok(serde_json::to_value(&s).map_err(|e| e.to_string())?),
+        None => Ok(serde_json::json!({ "provider_id": provider_id, "state": "DISCOVERED", "capabilities": [] })),
+    }
+}
+
+#[tauri::command]
+async fn provider_list_runnable(
+    state: tauri::State<'_, ProviderStateStore>,
+) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({ "runnable_providers": state.list_runnable() }))
+}
+
+// ─── M3: Performance Recording Commands ──────────────────────────────────────
+
+#[tauri::command]
+async fn perf_record(
+    state: tauri::State<'_, PerformanceStore>,
+    record: AgentPerformanceRecord,
+) -> Result<serde_json::Value, String> {
+    let agent_id = record.agent_id.clone();
+    state.append(record);
+    Ok(serde_json::json!({ "recorded": true, "agent_id": agent_id }))
+}
+
+#[tauri::command]
+async fn perf_get_by_agent(
+    state: tauri::State<'_, PerformanceStore>,
+    project_id: String,
+    agent_id: String,
+) -> Result<serde_json::Value, String> {
+    let records = state.get_by_agent(&project_id, &agent_id);
+    Ok(serde_json::json!({ "records": records, "count": records.len() }))
+}
+
+#[tauri::command]
+async fn perf_aggregate(
+    state: tauri::State<'_, PerformanceStore>,
+    project_id: String,
+    agent_id: String,
+) -> Result<serde_json::Value, String> {
+    Ok(state.aggregate(&project_id, &agent_id))
 }
 
 
