@@ -14,9 +14,9 @@
 | M1 | Tauri Host（双模式共存） | 低 | 2 周 |
 | M2 | Process Supervisor → Rust | 中 | 1 周 |
 | M3 | Provider State + Performance Profile → Rust | 低 | ✅ 完成 |
-| M4 | Workspace/Git → Rust | 中 | 1 周 |
-| M4 | Event/Streaming → Rust | 中 | 1 周 |
-| M5 | State/Persistence → Rust | 高 | 2 周 |
+| M4 | Workspace/Git → Rust | 中 | ✅ 完成 |
+| M5 | Event/Streaming → Rust | 中 | ⏳ 进行中 |
+| M6 | State/Persistence → Rust | 高 | 2 周 |
 | M6 | Plugin Runtime → Rust | 高 | 2 周 |
 | M7 | Orchestrator → Rust | 高 | 2 周 |
 | M8 | Recovery/Human Control → Rust | 高 | 1 周 |
@@ -133,7 +133,28 @@ pub trait WorkspaceManager {
 
 ---
 
-## M4：Event / Streaming → Rust
+## M4：Workspace / Git → Rust ✅
+
+**已完成（commit `3761b4d3`）：**
+- [x] `WorkspaceManagerState` — in-memory worktree registry
+- [x] `workspace_create` — 为 Executor/Reviewer 创建隔离 worktree
+- [x] `workspace_delete` — 清理 worktree
+- [x] `workspace_git_status` — git status --porcelain
+- [x] `workspace_git_diff` — git diff --stat
+- [x] `workspace_commit` — git add -A + commit，返回 SHA
+- [x] `workspace_snapshot` — 完整快照（branch + sha + files + status + diff）
+- [x] `workspace_list` — 列出所有 managed worktrees
+- [x] Windows 兼容（git worktree add + clone fallback）
+
+**关键 invariant 已实现：**
+```
+Executor worktree: /project/__wt_task-abc123  ← 可写
+Reviewer worktree: /project/__wt_review-abc123 ← 独立，不可写
+```
+
+---
+
+## M5：Event / Streaming → Rust
 
 **Java 现有：** `EventBus.java`、`EventStoreService.java`、`EventMapper.java`
 
