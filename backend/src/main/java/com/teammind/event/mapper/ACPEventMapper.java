@@ -58,6 +58,18 @@ public class ACPEventMapper implements EventMapper {
             case "subagent.start", "subagent_started" ->
                     events.add(mapSubagentStart(node, taskId, pluginId, role));
             case "error" -> events.add(mapError(node, taskId, pluginId, role));
+            // ─── Codex --json events ──────────────────────────────
+            case "thread.started" ->
+                    events.add(mapCodexThreadStarted(node, taskId, pluginId, role));
+            case "turn.started" ->
+                    events.add(mapCodexTurnStarted(node, taskId, pluginId, role));
+            case "turn.completed" ->
+                    events.addAll(mapCodexTurnCompleted(node, taskId, pluginId, role));
+            case "item.completed" -> events.addAll(mapCodexItemCompleted(node, taskId, pluginId, role));
+            // ─── Claude stream-json events ────────────────────────
+            case "system" -> events.addAll(mapClaudeSystem(node, taskId, pluginId, role));
+            case "assistant" -> events.addAll(mapClaudeAssistant(node, taskId, pluginId, role));
+            case "result" -> events.addAll(mapClaudeResult(node, taskId, pluginId, role));
             default -> events.add(mapUnknownEvent(node, taskId, pluginId, role, type));
         }
 
@@ -202,6 +214,186 @@ public class ACPEventMapper implements EventMapper {
                 taskId, pluginId, role, meta);
     }
 
+    // ─── Codex --json event mappers ───────────────────────────────
+
+    private TeamMindEvent mapCodexThreadStarted(JsonNode node, String taskId, String pluginId, String role) {
+        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+        meta.put("thread_id", node.has("thread_id") ? node.get("thread_id").asText("") : "");
+        meta.put("source", "codex_thread_started");
+        return TeamMindEvent.of(EventType.PROCESS_STARTED, taskId, pluginId, role, meta);
+    }
+
+    private TeamMindEvent mapCodexTurnStarted(JsonNode node, String taskId, String pluginId, String role) {
+        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+        meta.put("source", "codex_turn_started");
+        return TeamMindEvent.of(EventType.AGENT_THINKING, taskId, pluginId, role, meta);
+    }
+
+    private List<TeamMindEvent> mapCodexTurnCompleted(JsonNode node, String taskId, String pluginId, String role) {
+        List<TeamMindEvent> events = new ArrayList<>();
+        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+        meta.put("source", "codex_turn_completed");
+        if (node.has("usage")) {
+            JsonNode usage = node.get("usage");
+            meta.put("input_tokens", usage.has("input_tokens") ? usage.get("input_tokens").asLong() : null);
+            meta.put("output_tokens", usage.has("output_tokens") ? usage.get("output_tokens").asLong() : null);
+        }
+        events.add(TeamMindEvent.of(EventType.TASK_COMPLETED, taskId, pluginId, role, meta));
+        return events;
+    }
+
+    private List<TeamMindEvent> mapCodexItemCompleted(JsonNode node, String taskId, String pluginId, String role) {
+        List<TeamMindEvent> events = new ArrayList<>();
+        JsonNode item = node.has("item") ? node.get("item") : null;
+        if (item == null) return events;
+
+        String itemType = item.has("type") ? item.get("type").asText("") : "";
+        String itemId = item.has("id") ? item.get("id").asText("") : "";
+
+        switch (itemType) {
+            case "agent_message" -> {
+                String text = item.has("text") ? item.get("text").asText("") : "";
+                if (!text.isBlank()) {
+                    Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                    meta.put("content", text.substring(0, Math.min(200, text.length())));
+                    meta.put("item_id", itemId);
+                    meta.put("source", "codex_agent_message");
+                    events.add(TeamMindEvent.of(EventType.AGENT_CHUNK, taskId, pluginId, role, meta));
+                }
+            }
+            case "error" -> {
+                String message = item.has("message") ? item.get("message").asText("") : "";
+                Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                meta.put("message", message);
+                meta.put("item_id", itemId);
+                meta.put("source", "codex_error");
+                events.add(TeamMindEvent.of(EventType.ERROR_RECOVERABLE, taskId, pluginId, role, meta));
+            }
+            case "reasoning" -> {
+                String text = item.has("text") ? item.get("text").asText("") : "";
+                if (!text.isBlank()) {
+                    Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                    meta.put("content", text.substring(0, Math.min(200, text.length())));
+                    meta.put("source", "codex_reasoning");
+                    events.add(TeamMindEvent.of(EventType.AGENT_THINKING, taskId, pluginId, role, meta));
+                }
+            }
+            default -> {
+                // Other item types (tool_use, etc.) — map to TOOL_CALLED
+                Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                meta.put("item_type", itemType);
+                meta.put("item_id", itemId);
+                meta.put("source", "codex_item_completed");
+                events.add(TeamMindEvent.of(EventType.AGENT_CHUNK, taskId, pluginId, role, meta));
+            }
+        }
+        return events;
+    }
+
+    // ─── Claude stream-json event mappers ─────────────────────────
+
+    private List<TeamMindEvent> mapClaudeSystem(JsonNode node, String taskId, String pluginId, String role) {
+        List<TeamMindEvent> events = new ArrayList<>();
+        String subtype = node.has("subtype") ? node.get("subtype").asText("") : "";
+
+        switch (subtype) {
+            case "init" -> {
+                Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                meta.put("session_id", node.has("session_id") ? node.get("session_id").asText("") : "");
+                meta.put("model", node.has("model") ? node.get("model").asText("") : "");
+                meta.put("permission_mode", node.has("permissionMode") ? node.get("permissionMode").asText("") : "");
+                meta.put("source", "claude_system_init");
+                events.add(TeamMindEvent.of(EventType.PROCESS_STARTED, taskId, pluginId, role, meta));
+            }
+            case "thinking_tokens" -> {
+                Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                meta.put("estimated_tokens", node.has("estimated_tokens") ? node.get("estimated_tokens").asInt(0) : 0);
+                meta.put("source", "claude_thinking");
+                events.add(TeamMindEvent.of(EventType.AGENT_THINKING, taskId, pluginId, role, meta));
+            }
+            default -> {
+                Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                meta.put("raw_subtype", subtype);
+                meta.put("source", "claude_system");
+                events.add(TeamMindEvent.of(EventType.AGENT_CHUNK, taskId, pluginId, role, meta));
+            }
+        }
+        return events;
+    }
+
+    private List<TeamMindEvent> mapClaudeAssistant(JsonNode node, String taskId, String pluginId, String role) {
+        List<TeamMindEvent> events = new ArrayList<>();
+        JsonNode message = node.has("message") ? node.get("message") : null;
+        if (message == null) return events;
+
+        JsonNode content = message.has("content") ? message.get("content") : null;
+        if (content == null || !content.isArray()) return events;
+
+        for (JsonNode part : content) {
+            String partType = part.has("type") ? part.get("type").asText("") : "";
+            switch (partType) {
+                case "text" -> {
+                    String text = part.has("text") ? part.get("text").asText("") : "";
+                    if (!text.isBlank()) {
+                        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                        meta.put("content", text.substring(0, Math.min(200, text.length())));
+                        meta.put("message_id", message.has("id") ? message.get("id").asText("") : "");
+                        meta.put("source", "claude_assistant_text");
+                        events.add(TeamMindEvent.of(EventType.AGENT_CHUNK, taskId, pluginId, role, meta));
+                    }
+                }
+                case "thinking" -> {
+                    String text = part.has("thinking") ? part.get("thinking").asText("") : "";
+                    if (!text.isBlank()) {
+                        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                        meta.put("content", text.substring(0, Math.min(200, text.length())));
+                        meta.put("source", "claude_thinking");
+                        events.add(TeamMindEvent.of(EventType.AGENT_THINKING, taskId, pluginId, role, meta));
+                    }
+                }
+                case "tool_use" -> {
+                    String name = part.has("name") ? part.get("name").asText("unknown") : "unknown";
+                    Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                    meta.put("tool", name);
+                    meta.put("input", part.has("input") ? part.get("input").toString() : "{}");
+                    meta.put("source", "claude_tool_use");
+                    events.add(TeamMindEvent.of(EventType.TOOL_CALLED, taskId, pluginId, role, meta));
+                }
+                default -> {
+                    Map<String, Object> meta = new java.util.LinkedHashMap<>();
+                    meta.put("part_type", partType);
+                    meta.put("source", "claude_assistant");
+                    events.add(TeamMindEvent.of(EventType.AGENT_CHUNK, taskId, pluginId, role, meta));
+                }
+            }
+        }
+        return events;
+    }
+
+    private List<TeamMindEvent> mapClaudeResult(JsonNode node, String taskId, String pluginId, String role) {
+        List<TeamMindEvent> events = new ArrayList<>();
+        String subtype = node.has("subtype") ? node.get("subtype").asText("") : "";
+        boolean isError = "error".equals(subtype);
+
+        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+        meta.put("source", "claude_result");
+        meta.put("stop_reason", node.has("stop_reason") ? node.get("stop_reason").asText("") : "");
+        meta.put("duration_ms", node.has("duration_ms") ? node.get("duration_ms").asLong() : null);
+
+        if (node.has("result")) {
+            String result = node.get("result").asText("");
+            meta.put("result_length", result.length());
+            meta.put("result_truncated", result.length() > 500);
+        }
+
+        if (isError) {
+            events.add(TeamMindEvent.of(EventType.TASK_FAILED, taskId, pluginId, role, meta));
+        } else {
+            events.add(TeamMindEvent.of(EventType.TASK_COMPLETED, taskId, pluginId, role, meta));
+        }
+        return events;
+    }
+
     private TeamMindEvent mapUnknownEvent(JsonNode node, String taskId, String pluginId, String role, String type) {
         Map<String, Object> meta = new java.util.LinkedHashMap<>();
         meta.put("raw_type", type);
@@ -225,7 +417,8 @@ public class ACPEventMapper implements EventMapper {
                 EventType.ERROR_CRITICAL,
                 EventType.EVIDENCE_VERIFIED,
                 EventType.PROCESS_STARTED,
-                EventType.AGENT_STARTED
+                EventType.AGENT_STARTED,
+                EventType.AGENT_THINKING
         );
     }
 }

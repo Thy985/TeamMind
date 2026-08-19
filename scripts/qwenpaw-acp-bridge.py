@@ -184,17 +184,37 @@ class RealACPBridge:
             emit(self._out, {"type": "error", "message": f"Connection failed: {e}"})
             return False
 
+    async def warmup(self, cwd):
+        """Pre-create session to avoid boot delay on first prompt."""
+        try:
+            sess = await asyncio.wait_for(
+                self._conn.new_session(cwd=cwd, mcpServers=[]),
+                timeout=180.0,  # Give workspace time to boot
+            )
+            self._session_id = sess.session_id
+            logger.info("Warmup complete: session=%s", self._session_id)
+            return True
+        except asyncio.TimeoutError:
+            logger.error("Warmup timeout after 180s")
+            return False
+        except Exception as e:
+            logger.error("Warmup failed: %s", e)
+            return False
+
     async def prompt(self, text, cwd, session_id=None):
         """Send a prompt using persistent session."""
         try:
-            if not session_id:
+            sid = session_id or self._session_id
+            if not sid:
+                # Fallback: create new session (will be slow if workspace not ready)
                 sess = await asyncio.wait_for(
                     self._conn.new_session(cwd=cwd, mcpServers=[]),
                     timeout=30.0,
                 )
-                session_id = sess.session_id
+                sid = sess.session_id
+                self._session_id = sid
 
-            await self._conn.prompt(session_id=session_id, prompt=[text_block(text)])
+            await self._conn.prompt(session_id=sid, prompt=[text_block(text)])
             emit(self._out, {"type": "done", "stop_reason": "end_turn"})
         except asyncio.TimeoutError:
             emit(self._out, {"type": "error",
@@ -221,15 +241,27 @@ class RealACPBridge:
         emit(self._out, {"type": "closed"})
 
 
-async def run_real_bridge(in_fp, out_fp, backend=None, runtime_provider=None):
+async def run_real_bridge(in_fp, out_fp, backend=None, runtime_provider=None,
+                          warmup=False, warmup_cwd=None):
     """Run persistent ACP bridge."""
     bridge = RealACPBridge(out_fp, backend, runtime_provider)
     connected = await bridge.connect()
     if not connected:
         return
 
+    # Warmup: pre-create session
+    if warmup:
+        cwd = warmup_cwd or os.getcwd()
+        logger.info("Warming up session (this may take 120-180s)...")
+        ok = await bridge.warmup(cwd)
+        if ok:
+            emit(out_fp, {"type": "status", "message": "warmup_complete",
+                          "session_id": bridge._session_id})
+        else:
+            emit(out_fp, {"type": "error", "message": "Warmup failed"})
+
     loop = asyncio.get_event_loop()
-    session_id = None
+    session_id = bridge._session_id
 
     while True:
         try:
@@ -258,12 +290,18 @@ async def run_real_bridge(in_fp, out_fp, backend=None, runtime_provider=None):
                 continue
             try:
                 await bridge.prompt(prompt, cwd, session_id)
-                # Keep session alive for reuse
-                if not session_id and bridge._conn:
-                    sess = await bridge._conn.new_session(cwd=cwd, mcpServers=[])
-                    session_id = sess.session_id
             except Exception as e:
                 emit(out_fp, {"type": "error", "message": str(e)})
+        elif action == "warmup":
+            # Pre-create session to avoid boot delay on first prompt
+            cwd = msg.get("cwd", os.getcwd())
+            emit(out_fp, {"type": "status", "message": "warming_up"})
+            ok = await bridge.warmup(cwd)
+            if ok:
+                session_id = bridge._session_id
+                emit(out_fp, {"type": "status", "message": "ready", "session_id": session_id})
+            else:
+                emit(out_fp, {"type": "error", "message": "Warmup failed"})
         elif action == "cancel":
             await bridge.cancel()
         elif action == "ping":
@@ -280,6 +318,10 @@ def main():
     parser.add_argument("--mode", choices=["real", "mock"], default="real")
     parser.add_argument("--backend", choices=["qwenpaw", "opencode"])
     parser.add_argument("--runtime-provider", choices=["openai-env"])
+    parser.add_argument("--warmup", action="store_true",
+                        help="Pre-warm session on startup (avoid first-prompt delay)")
+    parser.add_argument("--warmup-cwd", default=None,
+                        help="Working directory for warmup")
     args = parser.parse_args()
 
     in_fp = sys.stdin.buffer
@@ -295,7 +337,8 @@ def main():
         sys.exit(1)
 
     try:
-        asyncio.run(run_real_bridge(in_fp, out_fp, args.backend, args.runtime_provider))
+        asyncio.run(run_real_bridge(in_fp, out_fp, args.backend, args.runtime_provider,
+                                     args.warmup, args.warmup_cwd))
     except Exception as e:
         emit(out_fp, {"type": "error", "message": f"Bridge error: {e}"})
 

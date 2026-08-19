@@ -4,6 +4,7 @@ import com.teammind.event.EventBus;
 import com.teammind.event.TeamMindEvent;
 import com.teammind.plugin.adapter.CLIConfig;
 import com.teammind.plugin.adapter.GenericCLIPlugin;
+import com.teammind.runtime.ProcessSupervisor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
@@ -26,14 +27,16 @@ public class LegacyTransport implements AgentTransport {
 
     private final CLIConfig config;
     private final EventBus eventBus;
+    private final ProcessSupervisor processSupervisor;
     private final GenericCLIPlugin plugin;
     private final AtomicInteger sessionIdCounter = new AtomicInteger(0);
     private final Map<String, GenericCLIPlugin> activeSessions = new ConcurrentHashMap<>();
 
-    public LegacyTransport(CLIConfig config, EventBus eventBus) {
+    public LegacyTransport(CLIConfig config, EventBus eventBus, ProcessSupervisor processSupervisor) {
         this.config = config;
         this.eventBus = eventBus;
-        this.plugin = new GenericCLIPlugin(config, eventBus);
+        this.processSupervisor = processSupervisor;
+        this.plugin = new GenericCLIPlugin(config, eventBus, processSupervisor);
     }
 
     @Override
@@ -47,7 +50,7 @@ public class LegacyTransport implements AgentTransport {
         log.info("[{}] Starting LegacyTransport session: {}", config.cliId(), sessionId);
 
         // 复用现有 plugin 实例（每个 session 一个 plugin 实例）
-        GenericCLIPlugin sessionPlugin = new GenericCLIPlugin(config, eventBus);
+        GenericCLIPlugin sessionPlugin = new GenericCLIPlugin(config, eventBus, processSupervisor);
         activeSessions.put(sessionId, sessionPlugin);
 
         return new LegacyAgentSession(sessionId, config.cliId(), sessionPlugin);

@@ -42,7 +42,7 @@ public class PluginRegistry {
     public PluginRegistry(EventBus eventBus, PluginManager pluginManager, ProcessSupervisor processSupervisor) {
         this.eventBus = eventBus;
         this.pluginManager = pluginManager;
-        this.transportFactory = new AgentTransportFactory(eventBus);
+        this.transportFactory = new AgentTransportFactory(eventBus, processSupervisor);
         this.processSupervisor = processSupervisor;
     }
 
@@ -80,7 +80,7 @@ public class PluginRegistry {
         List<AgentTransport> transports = new java.util.ArrayList<>();
         try {
             CLIConfig legacyConfig = buildLegacyConfig(agentId);
-            transports.add(new LegacyTransport(legacyConfig, eventBus));
+            transports.add(new LegacyTransport(legacyConfig, eventBus, processSupervisor));
             log.info("Created LegacyTransport for agent={}", agentId);
         } catch (Exception e) {
             log.warn("Failed to create LegacyTransport for agent={}: {}", agentId, e.getMessage());
