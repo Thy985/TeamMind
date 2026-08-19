@@ -13,7 +13,8 @@
 | M0 | 冻结 Runtime Contract | 低 | 1 周 |
 | M1 | Tauri Host（双模式共存） | 低 | 2 周 |
 | M2 | Process Supervisor → Rust | 中 | 1 周 |
-| M3 | Workspace/Git → Rust | 中 | 1 周 |
+| M3 | Provider State + Performance Profile → Rust | 低 | ✅ 完成 |
+| M4 | Workspace/Git → Rust | 中 | 1 周 |
 | M4 | Event/Streaming → Rust | 中 | 1 周 |
 | M5 | State/Persistence → Rust | 高 | 2 周 |
 | M6 | Plugin Runtime → Rust | 高 | 2 周 |
@@ -95,7 +96,24 @@ pub trait ProcessSupervisor {
 
 ---
 
-## M3：Workspace / Git → Rust
+## M3：Provider State + Performance Profile → Rust ✅
+
+**已完成（commit `85a392e5`）：**
+- [x] `ProviderState` 枚举：DISCOVERED/CONFIGURED/STARTING/READY/DEGRADED/UNAVAILABLE/STOPPED
+- [x] `ProviderStatus` + `ProviderStateStore`（in-memory，Tauri commands）
+- [x] `AgentPerformanceRecord` + `PerformanceStore`（in-memory，Tauri commands）
+- [x] Tauri commands: `provider_set_status`, `provider_get_status`, `provider_list_runnable`
+- [x] Tauri commands: `perf_record`, `perf_get_by_agent`, `perf_aggregate`
+
+**Java 对应实现已删除（迁移到 Rust）：**
+- ~~`ProviderState.java` / `ProviderStatus.java`~~ → 删除
+- ~~`AgentPerformanceRecord.java` / `ProjectAgentProfile.java`~~ → 删除
+- ~~`*Repository.java`~~ → 删除
+- `ReadinessManager.java` → 回滚原始实现（Rust 现在负责）
+
+---
+
+## M4：Workspace / Git → Rust
 
 **Java 现有：** `GitWorktreeService.java`、`WorkspaceManager.java`
 
