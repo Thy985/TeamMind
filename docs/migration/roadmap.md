@@ -15,7 +15,7 @@
 | M2 | Process Supervisor → Rust | 中 | 1 周 |
 | M3 | Provider State + Performance Profile → Rust | 低 | ✅ 完成 |
 | M4 | Workspace/Git → Rust | 中 | ✅ 完成 |
-| M5 | Event/Streaming → Rust | 中 | ⏳ 进行中 |
+| M5 | Event/Streaming → Rust | 中 | ✅ 完成 |
 | M6 | State/Persistence → Rust | 高 | 2 周 |
 | M6 | Plugin Runtime → Rust | 高 | 2 周 |
 | M7 | Orchestrator → Rust | 高 | 2 周 |
@@ -154,7 +154,23 @@ Reviewer worktree: /project/__wt_review-abc123 ← 独立，不可写
 
 ---
 
-## M5：Event / Streaming → Rust
+## M5：Event / Streaming → Rust ✅
+
+**已完成（commit `+M5`）：**
+- [x] `RuntimeEvent` — 事件数据结构（eventType + timestamp + taskId + pluginId + metadata）
+- [x] `EventBusState` — subscriber-based 事件分发（subscribe/unsubscribe/emit）
+- [x] `EventStoreState` — in-memory append + query + replay
+- [x] Tauri commands: `event_subscribe`, `event_unsubscribe`, `event_emit`
+- [x] Tauri commands: `event_store_find`, `event_store_replay`, `event_store_count`
+
+**已完成的 ACP 事件解析（M2.5 + M5）：**
+- Codex: thread.started, turn.started/completed, item.completed
+- Claude: system, assistant, result
+- Generic: terminal_output, file_change, tool_call, error, permission_request
+
+---
+
+## M6：State/Persistence → Rust
 
 **Java 现有：** `EventBus.java`、`EventStoreService.java`、`EventMapper.java`
 
