@@ -32,9 +32,13 @@ public class QwenPawACPTransport implements AgentTransport {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final EventBus eventBus;
-    private final String bridgeScript;  // Python bridge 脚本路径
+    private final String bridgeScript;
     private final Map<String, QwenPawSession> activeSessions = new ConcurrentHashMap<>();
     private final AtomicInteger sessionCounter = new AtomicInteger(0);
+
+    /** Provider 就绪状态（volatile 保证多线程可见性） */
+    private volatile ProviderStatus providerStatus = ProviderStatus.discovered("qwenpaw");
+    private volatile long startTimeMs = 0;
 
     public QwenPawACPTransport(EventBus eventBus, String bridgeScript) {
         this.eventBus = eventBus;
@@ -47,6 +51,11 @@ public class QwenPawACPTransport implements AgentTransport {
     }
 
     @Override
+    public ProviderStatus readiness() {
+        return providerStatus;
+    }
+
+    @Override
     public AgentSession start(AgentConfig config) {
         String sessionId = "qwenpaw-" + System.currentTimeMillis() + "-" + sessionCounter.incrementAndGet();
         log.info("[QwenPawACP] Starting session: {} bridge={}", sessionId, bridgeScript);
@@ -54,6 +63,54 @@ public class QwenPawACPTransport implements AgentTransport {
         QwenPawSession session = new QwenPawSession(sessionId, config, bridgeScript, eventBus);
         activeSessions.put(sessionId, session);
         return session;
+    }
+
+    @Override
+    public long prewarm(AgentConfig config) {
+        log.info("[QwenPawACP] Starting prewarm for provider qwenpaw...");
+        startTimeMs = System.currentTimeMillis();
+        providerStatus = ProviderStatus.starting("qwenpaw");
+        eventBus.emit(TeamMindEvent.of(EventType.PROVIDER_WARMING_UP,
+                "qwenpaw-prewarm", "qwenpaw", "PROVIDER",
+                Map.of("state", "STARTING", "reason", "workspace_initializing")));
+
+        try {
+            // Start a warmup session (this triggers workspace boot)
+            String warmupSessionId = "qwenpaw-warmup-" + System.currentTimeMillis();
+            QwenPawSession warmup = new QwenPawSession(warmupSessionId, config, bridgeScript, eventBus, true);
+            warmup.startWarmup();
+            activeSessions.put(warmupSessionId, warmup);
+
+            // Wait for warmup with 300s timeout
+            boolean ready = warmup.waitForReady(300_000);
+            long elapsed = System.currentTimeMillis() - startTimeMs;
+
+            if (ready) {
+                providerStatus = ProviderStatus.ready("qwenpaw", elapsed, "research", "planning", "consultation");
+                eventBus.emit(TeamMindEvent.of(EventType.PROVIDER_STATE_CHANGED,
+                        "qwenpaw-ready", "qwenpaw", "PROVIDER",
+                        Map.of("state", "READY", "startupMs", elapsed)));
+                log.info("[QwenPawACP] Prewarm complete: {}ms", elapsed);
+                return elapsed;
+            } else {
+                providerStatus = ProviderStatus.degraded("qwenpaw",
+                        "Workspace boot timeout after " + elapsed + "ms",
+                        "research", "planning");
+                eventBus.emit(TeamMindEvent.of(EventType.PROVIDER_STATE_CHANGED,
+                        "qwenpaw-degraded", "qwenpaw", "PROVIDER",
+                        Map.of("state", "DEGRADED", "error", "workspace_boot_timeout")));
+                log.warn("[QwenPawACP] Prewarm timeout: {}ms", elapsed);
+                return -1;
+            }
+        } catch (Exception e) {
+            long elapsed = System.currentTimeMillis() - startTimeMs;
+            providerStatus = ProviderStatus.unavailable("qwenpaw", e.getMessage());
+            eventBus.emit(TeamMindEvent.of(EventType.PROVIDER_STATE_CHANGED,
+                    "qwenpaw-error", "qwenpaw", "PROVIDER",
+                    Map.of("state", "UNAVAILABLE", "error", e.getMessage())));
+            log.error("[QwenPawACP] Prewarm failed: {}", e.getMessage());
+            return -1;
+        }
     }
 
     @Override
@@ -77,20 +134,63 @@ public class QwenPawACPTransport implements AgentTransport {
         private final AgentConfig config;
         private final String bridgeScript;
         private final EventBus eventBus;
+        private final boolean warmupMode;  // true = warmup session (no prompt)
         private volatile Process bridgeProcess;
         private volatile boolean alive = false;
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
         private volatile String currentSessionId; // QwenPaw ACP session ID
+        private volatile boolean ready = false;
+        private final Object readyLock = new Object();
 
         QwenPawSession(String sessionId, AgentConfig config, String bridgeScript, EventBus eventBus) {
+            this(sessionId, config, bridgeScript, eventBus, false);
+        }
+
+        QwenPawSession(String sessionId, AgentConfig config, String bridgeScript,
+                       EventBus eventBus, boolean warmupMode) {
             this.sessionId = sessionId;
             this.config = config;
             this.bridgeScript = bridgeScript;
             this.eventBus = eventBus;
+            this.warmupMode = warmupMode;
+        }
+
+        /** Warmup mode: start bridge and wait for ready event without prompt */
+        void startWarmup() {
+            try {
+                bridgeProcess = spawnBridgeForWarmup();
+                alive = true;
+                startReadLoop();
+                log.info("[QwenPawACP] Warmup session {} started, PID={}", sessionId, bridgeProcess.pid());
+            } catch (IOException e) {
+                log.error("[QwenPawACP] Failed to start warmup for session {}: {}", sessionId, e.getMessage());
+                throw new RuntimeException("Failed to start QwenPaw ACP warmup: " + e.getMessage(), e);
+            }
+        }
+
+        /** Wait for ready event with timeout */
+        boolean waitForReady(long timeoutMs) {
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            synchronized (readyLock) {
+                while (!ready && !cancelled.get() && bridgeProcess != null && bridgeProcess.isAlive()) {
+                    long remaining = deadline - System.currentTimeMillis();
+                    if (remaining <= 0) break;
+                    try {
+                        readyLock.wait(remaining);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+            return ready;
         }
 
         @Override
         public String submitPrompt(String prompt, Map<String, Object> context) {
+            if (warmupMode) {
+                throw new IllegalStateException("Warmup session cannot submit prompts");
+            }
             if (isAlive()) {
                 log.warn("[QwenPawACP] Session {} already running, cancelling first", sessionId);
                 cancel();
@@ -112,9 +212,9 @@ public class QwenPawACPTransport implements AgentTransport {
             String python = detectPython();
             String workDir = config.workingDir() != null ? config.workingDir() : ".";
 
-            ProcessBuilder pb = new ProcessBuilder(python, bridgeScript);
+            ProcessBuilder pb = new ProcessBuilder(python, bridgeScript, "--mode", "real", "--backend", "opencode");
             pb.directory(new File(workDir));
-            pb.redirectErrorStream(true); // merge stderr into stdout for simplicity
+            pb.redirectErrorStream(true);
             pb.redirectInput(ProcessBuilder.Redirect.PIPE);
             pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
 
@@ -133,6 +233,21 @@ public class QwenPawACPTransport implements AgentTransport {
             }
 
             return proc;
+        }
+
+        /** Spawn bridge for warmup only (no prompt sent) */
+        private Process spawnBridgeForWarmup() throws IOException {
+            String python = detectPython();
+            String workDir = config.workingDir() != null ? config.workingDir() : ".";
+
+            // Use opencode backend for fast warmup (~5s vs >180s for QwenPaw)
+            ProcessBuilder pb = new ProcessBuilder(python, bridgeScript, "--mode", "real", "--backend", "opencode");
+            pb.directory(new File(workDir));
+            pb.redirectErrorStream(true);
+            pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+            pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+
+            return pb.start();
         }
 
         private void startReadLoop() {
@@ -178,6 +293,10 @@ public class QwenPawACPTransport implements AgentTransport {
                     String agent = node.has("agent") ? node.get("agent").asText() : "unknown";
                     String mode = node.has("mode") ? node.get("mode").asText() : "unknown";
                     log.info("[QwenPawACP] Bridge ready: agent={} mode={}", agent, mode);
+                    synchronized (readyLock) {
+                        ready = true;
+                        readyLock.notifyAll();
+                    }
                     eventBus.emit(TeamMindEvent.of(EventType.AGENT_STARTED,
                             sessionId, "qwenpaw", "CONSULTANT",
                             Map.of("agent", agent, "mode", mode)));

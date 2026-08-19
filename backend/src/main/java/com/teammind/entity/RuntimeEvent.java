@@ -86,6 +86,7 @@ public class RuntimeEvent {
             case PACKAGE_INSTALLED, COMMAND_EXITED, ENV_VAR_MODIFIED -> EventTier.COLD;
             case PROCESS_STARTED -> EventTier.WARM;
             case FILE_DELETED -> EventTier.COLD;
+            case PROVIDER_STATE_CHANGED, PROVIDER_WARMING_UP -> EventTier.WARM;
         };
     }
 

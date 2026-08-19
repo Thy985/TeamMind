@@ -99,5 +99,9 @@ public enum EventType {
     COMMAND_EXITED,
     ENV_VAR_MODIFIED,
     PROCESS_STARTED,
-    FILE_DELETED
+    FILE_DELETED,
+
+    // ─── Provider 状态 ────────────────────────
+    PROVIDER_STATE_CHANGED,
+    PROVIDER_WARMING_UP
 }
